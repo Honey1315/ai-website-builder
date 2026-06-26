@@ -1,32 +1,23 @@
 "use client";
 
-export default function PreviewPanel({ code }: { code: string }) {
-  const srcDoc = `
-    <html>
-      <head>
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
-      <body>
-        <div id="root"></div>
-        <script type="module">
-          import React from "https://esm.sh/react";
-          import ReactDOM from "https://esm.sh/react-dom/client";
+import { SandpackPreview } from "@codesandbox/sandpack-react";
 
-          const App = () => {
-            return ${code};
-          };
-
-          ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-        </script>
-      </body>
-    </html>
-  `;
-
+export default function PreviewPanel() {
   return (
-    <iframe
-      className="w-full h-[600px] border rounded-lg"
-      sandbox="allow-scripts"
-      srcDoc={srcDoc}
-    />
+    <div className="w-full h-full flex flex-col border rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b bg-gray-50 font-semibold text-sm shrink-0">
+        Live Preview
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <SandpackPreview
+          style={{
+            height: "100%",
+          }}
+          showNavigator
+          showRefreshButton
+        />
+      </div>
+    </div>
   );
 }

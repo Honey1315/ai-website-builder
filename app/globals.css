@@ -3,6 +3,20 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Brand palette (split complementary) */
+  /* Primary: cyan-ish */
+  --brand-primary: #4CE6E1;
+  /* Secondary: magenta-ish */
+  --brand-secondary: #E64C9E;
+  /* Accent: orange-ish */
+  --brand-accent: #E6944C;
+
+  /* Map Tailwind blue tokens to brand colors so existing classes work */
+  --color-blue-100: color-mix(in srgb, var(--brand-primary) 15%, white);
+  --color-blue-200: color-mix(in srgb, var(--brand-primary) 35%, white);
+  --color-blue-400: var(--brand-primary);
+  --color-blue-600: var(--brand-primary);
+  --color-blue-700: color-mix(in srgb, var(--brand-primary) 85%, black);
 }
 
 @theme inline {
@@ -23,4 +37,82 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.builder-page {
+  background: radial-gradient(circle at top left, rgba(76, 230, 225, 0.18), transparent 25%),
+    radial-gradient(circle at bottom right, rgba(230, 76, 158, 0.14), transparent 30%),
+    #faf7ff;
+}
+
+.builder-header {
+  background: rgba(76, 230, 225, 0.18);
+  border-bottom: 1px solid rgba(76, 230, 225, 0.35);
+}
+
+.builder-title {
+  color: var(--brand-primary);
+}
+
+.builder-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(76, 230, 225, 0.28);
+  box-shadow: 0 30px 90px rgba(76, 230, 225, 0.08);
+}
+
+.builder-panel-alt {
+  background: rgba(230, 76, 158, 0.08);
+  border-color: rgba(230, 76, 158, 0.24);
+  box-shadow: 0 30px 90px rgba(230, 76, 158, 0.06);
+}
+
+.builder-panel-heading {
+  color: var(--brand-secondary);
+}
+
+.builder-btn {
+  border-radius: 0.6rem;
+  padding: 0.9rem 1.2rem;
+  font-weight: 700;
+  box-shadow: 0 18px 30px rgba(76, 230, 225, 0.12);
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.builder-btn-primary {
+  background: var(--brand-primary);
+  color: #111111;
+}
+
+.builder-btn-secondary {
+  background: var(--brand-secondary);
+  color: #ffffff;
+}
+
+.builder-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 42px rgba(76, 230, 225, 0.16);
+}
+
+.builder-input {
+  border: 1px solid rgba(76, 230, 225, 0.45);
+  border-radius: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(76, 230, 225, 0.08);
+  color: #111111;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.builder-status-info {
+  background: rgba(76, 230, 225, 0.16);
+  border: 1px solid rgba(76, 230, 225, 0.35);
+  color: var(--brand-primary);
+}
+
+.builder-status-error {
+  background: rgba(230, 76, 158, 0.16);
+  border: 1px solid rgba(230, 76, 158, 0.35);
+  color: var(--brand-secondary);
+}
+
+.builder-card-title {
+  color: var(--brand-secondary);
 }
