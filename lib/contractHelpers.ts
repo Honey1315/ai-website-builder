@@ -104,8 +104,10 @@ export function formatSummariesBlock(summaries: Map<string, FileSummary>): strin
 }
 
 export function formatFilesBlock(files: FileData[]): string {
+  // Use a distinct separator (NOT "// FILE:") so it never collides with
+  // the "// FILE:" markers the AI uses in its output, which extractMultipleFiles parses.
   return files
-    .map((file) => `// FILE: ${file.name}\n${file.content}`)
+    .map((file) => `=== FILE: ${file.name} ===\n${file.content}`)
     .join("\n\n");
 }
 
@@ -128,10 +130,13 @@ export function orderedManifestFiles(manifest: ProjectManifest): string[] {
 
   files.sort((a, b) => {
     const rank = (file: string) => {
-      if (file.endsWith(".css")) return 0;
+      // Generate components first
       if (file.includes("/components/")) return 1;
+      // Then App.jsx
       if (file.endsWith("App.jsx")) return 2;
-      return 3;
+      // Then CSS files (so they can see the exact classes used in components)
+      if (file.endsWith(".css")) return 3;
+      return 0;
     };
 
     return rank(a) - rank(b);

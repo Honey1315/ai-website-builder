@@ -23,6 +23,7 @@ export interface FileSummary {
   imports: string[];
   props: string[];
   children: string[];
+  cssClasses?: string[];
 }
 
 export interface ComponentUsage {

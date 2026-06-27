@@ -20,8 +20,9 @@ export function extractCode(response: string): string {
       }
       raw = lines.join('\n').trim();
     }
-    // Strip any wrapping code fences from the content block
-    const fenceMatch = raw.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
+    // If there is a code fence inside raw, extract ONLY the first code fence.
+    // This prevents trailing markdown/diffs from bleeding into the file content.
+    const fenceMatch = raw.match(/```[\w]*\n([\s\S]*?)\n```/);
     const content = fenceMatch ? fenceMatch[1].trim() : raw;
     console.log('extractCode: Returning content from FILE markers:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
     return content;
@@ -66,18 +67,20 @@ export function extractMultipleFiles(response: string): FileData[] {
 
   while ((match = fileMarkerPattern.exec(response)) !== null) {
     const filename = normalizeGeneratedFileName(match[1]);
-    // Strip any wrapping code fences from the content block
     let raw = match[2].trim();
-    // Remove trailing // END_FILE if present (as per SYSTEM_PROMPT)
+
+    // Remove trailing // END_FILE if present
     if (raw.endsWith('// END_FILE')) {
-      // Split into lines, remove the last line if it's exactly // END_FILE (trimmed)
       const lines = raw.split('\n');
       if (lines.length > 0 && lines[lines.length-1].trim() === '// END_FILE') {
         lines.pop();
       }
       raw = lines.join('\n').trim();
     }
-    const fenceMatch = raw.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
+
+    // If there is a code fence inside raw, extract ONLY the first code fence.
+    // This prevents trailing markdown/diffs from bleeding into the file content.
+    const fenceMatch = raw.match(/```[\w]*\n([\s\S]*?)\n```/);
     const content = fenceMatch ? fenceMatch[1].trim() : raw;
 
     files.push({

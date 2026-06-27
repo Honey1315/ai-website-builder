@@ -28,6 +28,8 @@ import { extractFileSummary } from "@/lib/extractFileSummary";
 
 import { buildMetadataMap } from "@/lib/fileMetadata";
 
+import { createCssFileForJsx } from "@/lib/cssGenerator";
+
 import {
 
   getAffectedFiles,
@@ -236,7 +238,7 @@ export class AIService {
 
 
 
-    return extractFileSummary(result, fileName);
+    return extractFileSummary(result, fileName, content);
 
   }
 
@@ -493,31 +495,18 @@ export class AIService {
 
 
       for (const fileName of orderedManifestFiles(manifest)) {
-
         if (!isCodegenFile(fileName)) continue;
 
-
-
         const file = await AIService.generateProjectFile(
-
           prompt,
-
           structure,
-
           manifest,
-
           fileName,
-
           summaries
-
         );
 
-
-
         generatedFiles.push(file);
-
         summaries.set(fileName, await AIService.generateFileSummary(fileName, file.content));
-
       }
 
 
@@ -734,14 +723,9 @@ export class AIService {
 
       const refinedFiles = extractMultipleFiles(result);
 
-
-
       return {
-
         code: refinedCode,
-
         files: refinedFiles.length > 0 ? refinedFiles : undefined,
-
       };
 
     } catch (error) {

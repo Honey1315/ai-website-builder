@@ -133,7 +133,9 @@ export default function BuilderPage() {
           return;
         }
 
-        setError(event.error);
+        if (event.type === "error") {
+          setError(event.error);
+        }
       };
 
       while (true) {

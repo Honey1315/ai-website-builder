@@ -19,6 +19,12 @@ Core Rules:
 * Return only the requested output.
 * No markdown unless explicitly requested.
 * No explanations.
+* Every React component file MUST use a default export unless the manifest explicitly specifies otherwise.
+* Every React component import MUST use the export type of the imported file.
+* Never mix named exports and default imports.
+* Never mix default exports and named imports.
+* Use one export style consistently across the entire project.
+* The default export convention is mandatory for React components.
   `;
 
 /* =========================================
@@ -46,6 +52,7 @@ Rules:
 * Always include:
   src/App.jsx
   src/styles.css
+* For every component you create, you MUST include a corresponding .css file (e.g. src/components/Todo.css).
 * START MINIMAL: default to App.jsx + styles.css only.
 * Only add a component file if it meets at least one of:
   - It is reused in 2+ places
@@ -58,7 +65,6 @@ Rules:
   - Anything under ~30 lines
 * Create hooks only when state logic is reused across 2+ components.
 * Create utilities only when pure logic is reused across 2+ files.
-* Maximum 6 component files unless the request explicitly describes a large multi-page app.
 * Use only:
   .jsx
   .css
@@ -159,9 +165,38 @@ Rules:
 * Do not invent components.
 * Do not create helper sub-components inside this file unless they are 50+ lines of logic.
   Small UI fragments (under ~30 lines) must be inlined as JSX, not extracted into named functions.
-* Export correctly.
-* App.jsx must import "./styles.css".
+* Every component file MUST end with:
+
+export default ComponentName;
+
+* Never export React components using:
+
+export { Component }
+
+or
+
+export const Component = ...
+
+unless explicitly required by the manifest.
+
+* Every import of a React component MUST be:
+
+import ComponentName from "./Component";
+
+never
+
+import { ComponentName } ...
+
+unless the manifest explicitly marks it as a named export.
+
+* Import style MUST exactly match the export style.
+
+* Verify every imported component resolves to a valid React component rather than undefined.
+
+* Before returning the file, mentally verify that every JSX element (<Card />, <Navbar />, etc.) corresponds to an imported default export.
+* Each component MUST import its own CSS file (e.g. import "./App.css" for App.jsx).
 * App.jsx must wire together all required components.
+* If generating a .css file, you MUST look at the 'cssClasses' property in the Existing File Summaries for the corresponding component and use exactly those class names.
 `;
 
 /* =========================================
@@ -201,6 +236,7 @@ Rules:
 * Do not create unrelated components.
 * Do not create unrelated files.
 * Ensure file compiles independently.
+* If generating a .css file, you MUST look at the 'cssClasses' property in the Existing File Summaries for the corresponding component and use exactly those class names.
   `;
 
 /* =========================================
@@ -269,6 +305,11 @@ Check:
 * invalid React usage
 * prop mismatches
 * component contract violations
+* * default export vs named export mismatches
+* default import vs named import mismatches
+* imported component evaluates to undefined
+* JSX elements rendered without matching exports
+* inconsistent export style across project
 
 Return ONLY the corrected file content.
 `;
@@ -322,7 +363,7 @@ Project Structure:
 Manifest:
 {manifest}
 
-Current Project Files:
+Current Project Files (input — delimited with === FILE: ===):
 
 {files}
 
@@ -332,20 +373,21 @@ Refinement Request:
 
 Rules:
 
-* Return complete updated files.
-* Never return partial edits.
+* Return ONLY the files that changed.
+* Return complete file content for each changed file — never partial edits.
 * Keep existing architecture intact.
-* Preserve imports unless required.
+* Preserve imports unless the refinement requires changing them.
 * Keep component contracts valid.
-* Return only code with FILE markers.
+* Output ONLY code using // FILE: markers — NO explanations, NO diffs, NO markdown.
+* Do NOT repeat the input === FILE: === format in your output.
 
-Format:
+Output format (use // FILE: markers, NOT === FILE: ===):
 
 // FILE: src/App.jsx
-...
+<complete updated file content>
 
 // FILE: src/styles.css
-...
+<complete updated file content>
 `;
 
 /* =========================================
@@ -386,8 +428,14 @@ Check:
 * unreachable components
 * invalid React code
 * architecture inconsistencies
+* * import/export mismatches
+* default export consistency
+* default import consistency
+* components imported as default but exported as named
+* components imported as named but exported as default
+* every rendered JSX component resolves to a valid exported component
   `;
-  export function formatPrompt(template, variables) {
+  export function formatPrompt(template: string, variables: Record<string, string>): string {
   let result = template;
 
   Object.entries(variables).forEach(([key, value]) => {

@@ -238,6 +238,8 @@ async function runContractFirstStream(
 
     );
 
+    console.log(summaries);
+
   }
 
 

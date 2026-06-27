@@ -21,7 +21,9 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-export function extractFileSummary(response: string, fileName: string): FileSummary {
+import { extractClassNamesFromJsx } from "@/lib/cssGenerator";
+
+export function extractFileSummary(response: string, fileName: string, fileContent: string = ""): FileSummary {
   try {
     const jsonText = extractJsonBlock(response);
     const parsed = JSON.parse(jsonText) as Record<string, unknown>;
@@ -32,6 +34,7 @@ export function extractFileSummary(response: string, fileName: string): FileSumm
       imports: normalizeStringArray(parsed.imports),
       props: normalizeStringArray(parsed.props),
       children: normalizeStringArray(parsed.children),
+      cssClasses: extractClassNamesFromJsx(fileContent),
     };
   } catch {
     return {
@@ -40,6 +43,7 @@ export function extractFileSummary(response: string, fileName: string): FileSumm
       imports: [],
       props: [],
       children: [],
+      cssClasses: extractClassNamesFromJsx(fileContent),
     };
   }
 }
