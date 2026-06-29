@@ -99,16 +99,23 @@ Return ONLY valid JSON.
 Schema:
 
 {
-  "files": [],
+  "files": [
+    "src/App.jsx",
+    "src/styles.css"
+  ],
   "components": [
     {
-      "name": "",
-      "file": "",
-      "props": [],
-      "reason": ""
+      "name": "ComponentName",
+      "file": "src/components/ComponentName.jsx",
+      "props": ["propOne", "propTwo"],
+      "reason": "One sentence"
     }
   ],
-  "dependencies": {},
+  "packages": { "dependencies": { "react": "^19", "react-dom": "^19", "recharts": "^2.15.0", "react-router-dom": "^7", ... } },
+  "dependencies": {
+    "App": ["Header", "TodoList"],
+    "TodoList": ["TodoItem"]
+  },
   "architecture": {
     "framework": "react",
     "language": "javascript",
@@ -116,20 +123,84 @@ Schema:
   }
 }
 
-Rules:
+IMPORTANT
 
-* files must exactly match the structure.
-* components must include reusable components only.
-* props must contain expected prop names.
-* dependencies maps parent component names to child component names.
-* Every component file must appear in components.
-* "reason" must be one sentence explaining why this component is a separate file
-  (e.g. "Reused on 3 pages" or "Contains 80+ lines of chart logic").
-* DO NOT create a component entry for one-off UI fragments that could live inline in App.jsx.
-* If a component is used only once and is under 50 lines, it should be inlined — remove it from the structure.
-* Return valid JSON only.
-* No markdown.
-* No explanation.
+The "files" array is the COMPLETE source of truth for the project.
+
+Every file that will exist in the project MUST appear exactly once in "files".
+
+The files array MUST contain ONLY string file paths.
+
+Correct:
+
+"files": [
+  "src/App.jsx",
+  "src/styles.css",
+  "src/components/Header.jsx"
+]
+
+Incorrect:
+
+"files": [
+  {
+    "path": "src/App.jsx",
+    "content": "..."
+  }
+]
+
+Do NOT include:
+- path objects
+- content
+- code
+- metadata
+
+Only file paths.
+
+Rules
+
+* files must exactly match the supplied Project Structure.
+* Never add extra files.
+* Never omit any file from the structure.
+* Preserve the same order as the Project Structure.
+* Always include src/App.jsx and src/styles.css.
+* Every imported component must have a corresponding JSX file in files.
+* Every imported CSS file must have a corresponding CSS file in files.
+* Every reusable component file must appear in both files and components.
+* Do NOT include App.jsx or styles.css in components.
+* Components should contain only reusable React components.
+* Do NOT create component entries for:
+  - one-off UI fragments
+  - wrappers
+  - headings
+  - simple forms
+  - buttons
+  - cards used once
+* If a component is used only once and is under 50 lines, inline it into its parent instead.
+* props must list every prop expected by the component.
+* dependencies maps each parent component to its direct child components only.
+* architecture must always be:
+{
+  "framework": "react",
+  "language": "javascript",
+  "styling": "css"
+}
+
+Before returning the JSON, verify:
+
+✓ Every JSX import has a matching file.
+✓ Every CSS import has a matching file.
+✓ Every component has exactly one JSX file.
+✓ Every component file appears in components.
+✓ Every file appears exactly once in files.
+✓ No missing files.
+✓ No duplicate files.
+✓ No path objects.
+✓ JSON is valid.
+
+Return ONLY valid JSON.
+
+No markdown.
+No explanation.
 `;
 
 
@@ -157,6 +228,7 @@ Rules:
 * Return raw file content only.
 * No markdown.
 * No explanations.
+* Stricly use dependencies given in the manifest packages dependencies.
 * Use React JavaScript only.
 * Ensure all imports exist.
 * Ensure all imports use correct relative paths.
@@ -334,15 +406,17 @@ Schema:
 "exports": [],
 "imports": [],
 "props": [],
-"children": []
+"children": [],
+"signatures": []
 }
 
 Rules:
 
-* exports = exported components/functions
+* exports = exported components/functions, specifying default vs named (e.g. "useNotes (default)")
 * imports = imported components/files
 * props = component props
 * children = rendered child components
+* signatures = strict API signatures of exports (e.g. "useNotes(): { searchTerm, setSearchTerm }" or "Note = { title: string, body: string }")
 
 Return JSON only.
 `;

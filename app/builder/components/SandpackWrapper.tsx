@@ -10,6 +10,7 @@ import type { FileData } from "@/types/ai";
 interface SandpackWrapperProps {
   code: string;
   files?: FileData[];
+  dependencies?: Record<string, string>;
   children: ReactNode;
 }
 
@@ -76,9 +77,21 @@ export default function SandpackWrapper({
   code,
   files,
   children,
+  dependencies,
 }: SandpackWrapperProps) {
   // Start with the hidden base files (entrypoint + html)
   const sandpackFiles: SandpackFileMap = { ...BASE_FILES };
+  const DEFAULT_DEPENDENCIES = {
+    react: "latest",
+    "react-dom": "latest",
+    "react-is" : "latest",
+  };
+  // console.log("dependencies: ", dependencies);
+
+  const latestDependencies: Record<string, string> = Object.fromEntries(
+  Object.keys(dependencies ?? {}).map((key) => [key, "latest"])
+);
+
 
   if (files && files.length > 0) {
     // Merge provided files — normalise paths to absolute sandpack keys
@@ -119,8 +132,8 @@ export default function SandpackWrapper({
       files={sandpackFiles}
       customSetup={{
         dependencies: {
-          react: "latest",
-          "react-dom": "latest",
+          ...DEFAULT_DEPENDENCIES,
+          ...latestDependencies,
         },
       }}
       theme="dark"

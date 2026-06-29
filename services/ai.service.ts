@@ -197,6 +197,8 @@ export class AIService {
     });
 
 
+    // console.log("Generated manifest result:", result); // Log the raw result for debugging
+    // console.log("Extracted manifest:", extractManifest(result)); // Log the extracted manifest for debugging
 
     return extractManifest(result) || createFallbackManifest(prompt, structure);
 
@@ -237,7 +239,7 @@ export class AIService {
     });
 
 
-
+    // console.log(extractFileSummary(result, fileName, content))
     return extractFileSummary(result, fileName, content);
 
   }
@@ -492,23 +494,31 @@ export class AIService {
 
       const summaries = new Map<string, FileSummary>();
 
+//       console.log("Manifest:");
+// console.log(manifest.files);
 
+// console.log("Ordered:");
+// console.log(orderedManifestFiles(manifest));
 
-      for (const fileName of orderedManifestFiles(manifest)) {
-        if (!isCodegenFile(fileName)) continue;
+for (const fileName of orderedManifestFiles(manifest)) {
+  // console.log("Generating:", fileName);
 
-        const file = await AIService.generateProjectFile(
-          prompt,
-          structure,
-          manifest,
-          fileName,
-          summaries
-        );
+  const file = await AIService.generateProjectFile(
+    prompt,
+    structure,
+    manifest,
+    fileName,
+    summaries
+  );
 
-        generatedFiles.push(file);
-        summaries.set(fileName, await AIService.generateFileSummary(fileName, file.content));
-      }
+  // console.log("Generated file:", file.name);
+  // console.log("Length:", file.content.length);
 
+  generatedFiles.push(file);
+}
+
+// console.log("Final generated files:");
+// console.log(generatedFiles.map(f => f.name));
 
 
       let validation = AIService.validateGeneratedFiles(manifest, generatedFiles);

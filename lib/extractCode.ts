@@ -8,11 +8,11 @@ export function extractCode(response: string): string {
   const fileMarkerPattern = /\/\/\s*FILE:\s*([^\n]+)\n([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
   const fileMarkerMatch = fileMarkerPattern.exec(trimmed);
   if (fileMarkerMatch) {
-    console.log('extractCode: Detected FILE markers');
+    // console.log('extractCode: Detected FILE markers');
     let raw = fileMarkerMatch[2].trim();
     // Remove trailing // END_FILE if present (as per SYSTEM_PROMPT)
     if (raw.endsWith('// END_FILE')) {
-      console.log('extractCode: Removing trailing // END_FILE');
+      // console.log('extractCode: Removing trailing // END_FILE');
       // Split into lines, remove the last line if it's exactly // END_FILE (trimmed)
       const lines = raw.split('\n');
       if (lines.length > 0 && lines[lines.length-1].trim() === '// END_FILE') {
@@ -24,7 +24,7 @@ export function extractCode(response: string): string {
     // This prevents trailing markdown/diffs from bleeding into the file content.
     const fenceMatch = raw.match(/```[\w]*\n([\s\S]*?)\n```/);
     const content = fenceMatch ? fenceMatch[1].trim() : raw;
-    console.log('extractCode: Returning content from FILE markers:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
+    // console.log('extractCode: Returning content from FILE markers:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
     return content;
   }
 

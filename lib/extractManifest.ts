@@ -3,6 +3,7 @@ import {
   MAX_GENERATED_FILES,
   ProjectArchitecture,
   ProjectManifest,
+  ProjectPackages,
 } from "@/types/contract";
 
 const DEFAULT_FILES = ["src/App.jsx", "src/styles.css"];
@@ -11,6 +12,15 @@ const DEFAULT_ARCHITECTURE: ProjectArchitecture = {
   framework: "react",
   language: "javascript",
   styling: "css",
+};
+
+const DEFAULT_PACKAGES: ProjectPackages = {
+  dependencies: {
+    react: "^19",
+    "react-dom": "^19",
+    "react-router-dom": "^7",
+    uuid: "^9",
+  },
 };
 
 function extractJsonBlock(response: string): string {
@@ -81,6 +91,30 @@ function normalizeArchitecture(architecture: unknown): ProjectArchitecture {
   };
 }
 
+function normalizePackages(
+  packages: unknown
+): { dependencies: Record<string, string> } {
+  if (!packages || typeof packages !== "object" || Array.isArray(packages)) {
+    return { dependencies: {} };
+  }
+
+  const deps = (packages as Record<string, unknown>).dependencies;
+
+  if (!deps || typeof deps !== "object" || Array.isArray(deps)) {
+    return { dependencies: {} };
+  }
+
+  const dependencies: Record<string, string> = {};
+
+  Object.entries(deps as Record<string, unknown>).forEach(([name, version]) => {
+    if (typeof version === "string") {
+      dependencies[name] = version;
+    }
+  });
+
+  return { dependencies };
+}
+
 function normalizeFilePaths(files: unknown): string[] {
   if (!Array.isArray(files)) return [];
 
@@ -128,6 +162,7 @@ export function extractManifest(response: string): ProjectManifest | null {
     const components = normalizeComponents(parsed.components);
     const dependencies = normalizeDependencies(parsed.dependencies);
     const architecture = normalizeArchitecture(parsed.architecture);
+    const packages = normalizePackages(parsed.packages);
 
     let files = normalizeFilePaths(parsed.files);
 
@@ -146,6 +181,7 @@ export function extractManifest(response: string): ProjectManifest | null {
       components,
       dependencies,
       architecture,
+      packages,
     };
   } catch {
     return null;
@@ -184,5 +220,6 @@ export function createFallbackManifest(
     components,
     dependencies,
     architecture: DEFAULT_ARCHITECTURE,
+    packages: DEFAULT_PACKAGES,
   };
 }

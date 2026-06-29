@@ -34,6 +34,7 @@ export function extractFileSummary(response: string, fileName: string, fileConte
       imports: normalizeStringArray(parsed.imports),
       props: normalizeStringArray(parsed.props),
       children: normalizeStringArray(parsed.children),
+      signatures: normalizeStringArray(parsed.signatures),
       cssClasses: extractClassNamesFromJsx(fileContent),
     };
   } catch {
@@ -43,6 +44,7 @@ export function extractFileSummary(response: string, fileName: string, fileConte
       imports: [],
       props: [],
       children: [],
+      signatures: [],
       cssClasses: extractClassNamesFromJsx(fileContent),
     };
   }

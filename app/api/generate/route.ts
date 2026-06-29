@@ -158,7 +158,7 @@ async function runContractFirstStream(
 
   controller.enqueue(streamEvent({ type: "structure_paths", paths: structure }));
 
-
+  // console.log("Generated structure:", structure); // Log the generated structure for debugging
 
   const manifest = await AIService.generateManifest(prompt, structure);
 
@@ -174,6 +174,7 @@ async function runContractFirstStream(
 
   const summaries = new Map<string, FileSummary>();
 
+  // console.log("manifest :", manifest); // Log the manifest for debugging
 
 
   controller.enqueue(streamEvent({ type: "structure", files: placeholderFiles }));
@@ -183,6 +184,7 @@ async function runContractFirstStream(
   let index = 0;
 
 
+  // console.log("Starting file generation for files:", fileNames); // Log the list of files to be generated
 
   for (const fileName of fileNames) {
 
@@ -238,7 +240,7 @@ async function runContractFirstStream(
 
     );
 
-    console.log(summaries);
+    // console.log("Generated file:", fileName); // Log each generated file
 
   }
 

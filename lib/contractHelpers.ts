@@ -118,7 +118,7 @@ export function formatMismatchBlock(mismatches: ValidationMismatch[]): string {
 }
 
 export function isCodegenFile(fileName: string): boolean {
-  return /\.(jsx|css|js)$/i.test(fileName);
+  return /\.(jsx|css|js|json)$/i.test(fileName);
 }
 
 export function isContractFile(fileName: string): boolean {

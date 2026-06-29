@@ -89,6 +89,7 @@ export default function BuilderPage() {
 
         if (event.type === "manifest") {
           setManifest(event.manifest);
+          // console.log("Received manifest:", event.manifest);
           setGenerationStatus(
             `Manifest ready: ${event.manifest.files.length} files, ${event.manifest.components.length} components.`
           );
@@ -310,7 +311,7 @@ export default function BuilderPage() {
 
 
       <div className="w-full">
-        <SandpackWrapper code={code} files={files}>
+        <SandpackWrapper code={code} files={files} dependencies={manifest?.packages.dependencies || {}}>
           <div className="w-full flex flex-col gap-4 p-1">
             {/* Row 1: File Explorer & Code Editor */}
             <div className="w-full h-[720px] flex gap-1 shrink-0">

@@ -4,6 +4,10 @@ export interface ComponentContract {
   props: string[];
 }
 
+export interface ProjectPackages {
+  dependencies: Record<string, string>;
+}
+
 export interface ProjectArchitecture {
   framework: string;
   language: string;
@@ -15,6 +19,7 @@ export interface ProjectManifest {
   components: ComponentContract[];
   dependencies: Record<string, string[]>;
   architecture: ProjectArchitecture;
+  packages: ProjectPackages;
 }
 
 export interface FileSummary {
@@ -24,6 +29,7 @@ export interface FileSummary {
   props: string[];
   children: string[];
   cssClasses?: string[];
+  signatures: string[];
 }
 
 export interface ComponentUsage {
@@ -61,4 +67,4 @@ export interface GenerationContext {
   metadataByFile: Map<string, FileMetadata>;
 }
 
-export const MAX_GENERATED_FILES = 10;
+export const MAX_GENERATED_FILES = 50;
