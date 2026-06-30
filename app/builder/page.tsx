@@ -89,7 +89,7 @@ export default function BuilderPage() {
 
         if (event.type === "manifest") {
           setManifest(event.manifest);
-          // console.log("Received manifest:", event.manifest);
+          console.log("Received manifest:", event.manifest);
           setGenerationStatus(
             `Manifest ready: ${event.manifest.files.length} files, ${event.manifest.components.length} components.`
           );
@@ -98,6 +98,7 @@ export default function BuilderPage() {
 
         if (event.type === "structure") {
           setFiles(event.files);
+          console.log("Received structure:", event.files);
           setCode(
             event.files.find((file) => file.name.endsWith("App.jsx"))?.content ||
               event.files[0]?.content ||
@@ -109,7 +110,7 @@ export default function BuilderPage() {
 
         if (event.type === "file") {
           setFiles((currentFiles) => mergeFile(currentFiles, event.file));
-
+          console.log("Received file:", event.file);
           if (event.file.name.endsWith("App.jsx")) {
             setCode(event.file.content);
           }

@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String     @db.VarChar(255)
+  email     String     @unique @db.VarChar(255)
+  image     String?
+  createdat DateTime   @default(now()) @db.Timestamp(6)
+  updatedat DateTime   @default(now()) @db.Timestamp(6)
+  projects  projects[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model generations {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String   @db.Uuid
+  prompt     String
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  projects   projects @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_generations_project")
+
+  @@index([project_id], map: "idx_generations_project_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model messages {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String   @db.Uuid
+  role       String   @db.VarChar(20)
+  content    String
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  projects   projects @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_messages_project")
+
+  @@index([created_at], map: "idx_messages_created_at")
+  @@index([project_id], map: "idx_messages_project_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model project_files {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String   @db.Uuid
+  path       String   @db.VarChar(500)
+  content    String
+  language   String?  @db.VarChar(50)
+  editable   Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+  projects   projects @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_project_files_project")
+
+  @@unique([project_id, path], map: "uq_project_file_path")
+  @@index([language], map: "idx_project_files_language")
+  @@index([path], map: "idx_project_files_path")
+  @@index([project_id], map: "idx_project_files_project_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model projects {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String          @db.Uuid
+  name          String          @db.VarChar(255)
+  description   String?
+  thumbnail     String?
+  created_at    DateTime        @default(now()) @db.Timestamp(6)
+  updated_at    DateTime        @default(now()) @db.Timestamp(6)
+  generations   generations[]
+  messages      messages[]
+  project_files project_files[]
+  User          User            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_projects_user")
+
+  @@index([user_id], map: "idx_projects_user_id")
+}

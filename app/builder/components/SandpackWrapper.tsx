@@ -74,7 +74,7 @@ body {
 }`;
 
 export default function SandpackWrapper({
-  code,
+  // code,
   files,
   children,
   dependencies,
@@ -87,6 +87,9 @@ export default function SandpackWrapper({
     "react-is" : "latest",
   };
   // console.log("dependencies: ", dependencies);
+  // console.log("code prop: ", code);
+  console.log("files prop: ", files);
+  console.log("dependencies prop: ", dependencies);
 
   const latestDependencies: Record<string, string> = Object.fromEntries(
   Object.keys(dependencies ?? {}).map((key) => [key, "latest"])
@@ -107,23 +110,23 @@ export default function SandpackWrapper({
       sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
     }
 
-    // If no App.jsx was provided among the files, fall back to code prop
-    const hasApp = files.some(
-      (f) => f.name === "src/App.jsx" || f.name === "/src/App.jsx"
-    );
-    if (!hasApp) {
-      sandpackFiles["/src/App.jsx"] = {
-        code: code || DEFAULT_APP,
-        hidden: false,
-      };
-    }
-  } else {
-    // No files at all — use code prop as App.jsx + default CSS
-    sandpackFiles["/src/App.jsx"] = {
-      code: code || DEFAULT_APP,
-      hidden: false,
-    };
-    sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
+  //   // If no App.jsx was provided among the files, fall back to code prop
+  //   const hasApp = files.some(
+  //     (f) => f.name === "src/App.jsx" || f.name === "/src/App.jsx"
+  //   );
+  //   if (!hasApp) {
+  //     sandpackFiles["/src/App.jsx"] = {
+  //       code: code || DEFAULT_APP,
+  //       hidden: false,
+  //     };
+  //   }
+  // } else {
+  //   // No files at all — use code prop as App.jsx + default CSS
+  //   sandpackFiles["/src/App.jsx"] = {
+  //     code: code || DEFAULT_APP,
+  //     hidden: false,
+  //   };
+  //   sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
   }
 
   return (

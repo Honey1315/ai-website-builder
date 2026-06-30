@@ -253,27 +253,15 @@ export default function Home() {
 
             {/* Auth */}
             <div className="space-y-4">
-              <Link href="/auth/login">
-                <div className="p-6 bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
-                  <div className="text-2xl mb-2">🔐</div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Sign In</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Access your account and saved projects.
-                  </p>
-                  <span className="text-blue-600 font-semibold text-sm">
-                    Sign in →
-                  </span>
-                </div>
-              </Link>
               <Link href="/auth/signup">
                 <div className="p-6 bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
-                  <div className="text-2xl mb-2">✍️</div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Sign Up</h3>
+                  <div className="text-2xl mb-2">🔐</div>
+                  <h3 className="font-semibold text-gray-900 mb-2">Sign Up with Google</h3>
                   <p className="text-sm text-gray-600 mb-4">
-                    Create a new account to get started.
+                    Create your account and start building.
                   </p>
                   <span className="text-blue-600 font-semibold text-sm">
-                    Create account →
+                    Get started →
                   </span>
                 </div>
               </Link>
