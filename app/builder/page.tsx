@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { FileData, GenerateStreamEvent } from "@/types/ai";
 import PromptInput from "./components/PromptInput";
 import PreviewPanel from "./components/PreviewPanel";
@@ -9,6 +9,9 @@ import ChatPanel from "./components/ChatPanel";
 import SandpackWrapper from "./components/SandpackWrapper";
 import SandpackFileExplorer from "./components/SandpackFileExplorer";
 import type { ProjectManifest } from "@/types/contract";
+import { createBrowserClient } from '@supabase/ssr';
+import { Project } from "@/types/project";
+import { useSearchParams } from 'next/navigation';
 
 type RefineApiResponse = {
   code?: string;
@@ -47,6 +50,15 @@ export default function BuilderPage() {
   const [manifest, setManifest] = useState<ProjectManifest | null>(null);
   const [projectStructure, setProjectStructure] = useState<string[]>([]);
   const [originalPrompt, setOriginalPrompt] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // Initialize Supabase client
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const generateCode = async (prompt: string) => {
     setLoading(true);
@@ -244,93 +256,191 @@ export default function BuilderPage() {
     }
   };
 
+  // Save project function
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    setSaveSuccess(false);
+    setError("");
+
+    try {
+      // Get the current user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Generate a project ID if we don't have one
+      const id = searchParams.get("projectId") ?? crypto.randomUUID();
+
+      // Prepare the project data
+      // We'll use the first line of the prompt as the project name, or a default
+      const projectName = originalPrompt
+        ?.split('\n')
+        .find(line => line.trim() !== '')
+        ?.substring(0, 50) || "Untitled Project";
+
+      const projectData: Project = {
+        id,
+        name: projectName,
+        description: originalPrompt || "",
+        code: "", // We are not using the code field, we are using files
+        files,
+        createdAt: new Date(), // This will be ignored by the API because we are using upsert and the server sets it
+        updatedAt: new Date(), // Same
+        userId: user.id,
+        thumbnail: undefined, // We don't have a thumbnail
+        isPublic: false,
+      };
+
+      // console.log("Saving project data:", projectData);
+
+      // Call the save API
+      const response = await fetch("/api/project/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(projectData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save project");
+      }
+
+      // If we don't have a projectId, set it to the one we just used
+      if (!projectId) {
+        setProjectId(id);
+      }
+
+      setSaveSuccess(true);
+
+      // Optionally, hide the success message after a few seconds
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 3000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [code, files, originalPrompt, projectId, projectStructure, supabase]);
+
   return (
-  <div className="builder-page min-h-screen flex flex-col gap-4">
-    {/* HEADER */}
-    <nav className="bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex items-center gap-1">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">AI</span>
+    <div className="builder-page min-h-screen flex flex-col gap-4">
+      {/* HEADER */}
+      <nav className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">AI</span>
+                </div>
+                <span className="text-xl font-bold text-gray-900">
+                  Website Builder
+                </span>
             </div>
-            <span className="text-xl font-bold text-gray-900">
-              Website Builder
-            </span>
+            <div>
+              {isSaving ? (
+                <button disabled className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg">
+                  Saving...
+                </button>
+              ) : (
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Save Project
+                </button>
+              )}
+              {saveSuccess && (
+                <span className="ml-2 text-green-600">Saved!</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* GENERATE */}
+      <div className="p-4 text-black">
+        <h2 className="text-lg font-semibold mb-3">
+          Generate
+        </h2>
+        <PromptInput onSubmit={generateCode} />
+      </div>
+
+      {/* CHAT */}
+      <div className="p-4">
+        <h3 className="text-lg font-semibold mb-3 text-black">
+          Refine / Chat
+        </h3>
+        <ChatPanel onSend={refineCode} />
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 p-6 overflow-auto flex flex-col gap-4">
+        {error && (
+          <div className="builder-status-error p-3 rounded-3xl shrink-0">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="builder-status-info p-3 rounded-3xl shrink-0">
+            {generationStatus || "Generating code..."}
+          </div>
+        )}
+
+        {refining && <RefineWaitingStatus />}
+
+        {manifest && (
+          <div className="builder-status-info p-3 rounded-3xl shrink-0 text-sm">
+            <div className="font-semibold mb-1">Project manifest</div>
+            <div>
+              Components:{" "}
+              {manifest.components.length > 0
+                ? manifest.components
+                    .map((component) => `${component.name}(${component.props.join(", ")})`)
+                    .join(" · ")
+                : "None"}
+            </div>
+            <div>
+              Stack: {manifest.architecture.framework} / {manifest.architecture.language} /{" "}
+              {manifest.architecture.styling}
+            </div>
+          </div>
+        )}
+
+
+        <div className="w-full">
+          <SandpackWrapper code={code} files={files} dependencies={manifest?.packages.dependencies || {}}>
+            <div className="w-full flex flex-col gap-4 p-1">
+              {/* Row 1: File Explorer & Code Editor */}
+              <div className="w-full h-[720px] flex gap-1 shrink-0">
+                <div className="flex-[2_2_0%] min-w-0 h-full">
+                  <SandpackFileExplorer />
+                </div>
+                <div className="flex-[8_8_0%] min-w-0 h-full">
+                  <CodeEditor onSave={setCode} />
+                </div>
+              </div>
+              {/* Row 2: Live Preview */}
+              <div className="w-full h-[720px] shrink-0">
+                <PreviewPanel />
+              </div>
+            </div>
+          </SandpackWrapper>
         </div>
       </div>
-    </nav>
-
-    {/* GENERATE */}
-    <div className="p-4 text-black">
-      <h2 className="text-lg font-semibold mb-3">
-        Generate
-      </h2>
-      <PromptInput onSubmit={generateCode} />
     </div>
-
-    {/* CHAT */}
-    <div className="p-4">
-      <h3 className="text-lg font-semibold mb-3 text-black">
-        Refine / Chat
-      </h3>
-      <ChatPanel onSend={refineCode} />
-    </div>
-
-    {/* MAIN CONTENT */}
-    <div className="flex-1 p-6 overflow-auto flex flex-col gap-4">
-      {error && (
-        <div className="builder-status-error p-3 rounded-3xl shrink-0">
-          {error}
-        </div>
-      )}
-
-      {loading && (
-        <div className="builder-status-info p-3 rounded-3xl shrink-0">
-          {generationStatus || "Generating code..."}
-        </div>
-      )}
-
-      {refining && <RefineWaitingStatus />}
-
-      {manifest && (
-        <div className="builder-status-info p-3 rounded-3xl shrink-0 text-sm">
-          <div className="font-semibold mb-1">Project manifest</div>
-          <div>
-            Components:{" "}
-            {manifest.components.length > 0
-              ? manifest.components
-                  .map((component) => `${component.name}(${component.props.join(", ")})`)
-                  .join(" · ")
-              : "None"}
-          </div>
-          <div>
-            Stack: {manifest.architecture.framework} / {manifest.architecture.language} /{" "}
-            {manifest.architecture.styling}
-          </div>
-        </div>
-      )}
-
-
-      <div className="w-full">
-        <SandpackWrapper code={code} files={files} dependencies={manifest?.packages.dependencies || {}}>
-          <div className="w-full flex flex-col gap-4 p-1">
-            {/* Row 1: File Explorer & Code Editor */}
-            <div className="w-full h-[720px] flex gap-1 shrink-0">
-              <div className="flex-[2_2_0%] min-w-0 h-full">
-                <SandpackFileExplorer />
-              </div>
-              <div className="flex-[8_8_0%] min-w-0 h-full">
-                <CodeEditor onSave={setCode} />
-              </div>
-            </div>
-          </div>
-            {/* Row 2: Live Preview */}
-            <div className="w-full h-[720px] shrink-0">
-              <PreviewPanel />
-            </div>
-        </SandpackWrapper>
-      </div>
-    </div>
-  </div>
-);
+  );
 }
