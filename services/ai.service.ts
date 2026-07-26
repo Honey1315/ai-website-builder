@@ -17,6 +17,7 @@ import {
   FIX_CONTRACT_FILE_PROMPT_TEMPLATE,
 
   REFINE_PROMPT_TEMPLATE,
+  GENERATE_PROJECT_METADATA_PROMPT_TEMPLATE,
 
 } from "@/lib/prompts";
 
@@ -752,5 +753,40 @@ for (const fileName of orderedManifestFiles(manifest)) {
 
   }
 
+  static async generateProjectMetadata(
+    prompt: string
+  ): Promise<{ name: string; description: string }> {
+    try {
+      const result = await callWithRetry(async () => {
+        const formattedPrompt = formatPrompt(GENERATE_PROJECT_METADATA_PROMPT_TEMPLATE, {
+          prompt,
+        });
+
+        return await callOpenRouter([
+          {
+            role: "user",
+            content: formattedPrompt,
+          },
+        ]);
+      });
+
+      // Parse the JSON response
+      const parsed = JSON.parse(result);
+      return {
+        name: String(parsed.name || "Untitled Project").substring(0, 50),
+        description: String(parsed.description || ""),
+      };
+    } catch (error) {
+      // Fallback to original behavior
+      const firstLine = prompt
+        .split('\n')
+        .find(line => line.trim() !== '') || "Untitled Project";
+
+      return {
+        name: String(firstLine).substring(0, 50),
+        description: prompt,
+      };
+    }
+  }
 }
 

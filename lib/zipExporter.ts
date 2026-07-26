@@ -18,44 +18,54 @@ export async function createProjectZip(
   // Add additional files
   files.forEach((file) => {
     const filePath = file.name.startsWith("/") ? file.name.slice(1) : file.name;
-    zip.file(`src/${filePath}`, file.content);
+    
+    // If it's already a root file or in public/, don't prepend src/
+    if (filePath === "package.json" || filePath.startsWith("public/") || filePath === "index.js") {
+      zip.file(filePath, file.content);
+    } else {
+      const targetPath = filePath.startsWith("src/") ? filePath : `src/${filePath}`;
+      zip.file(targetPath, file.content);
+    }
   });
 
-  // Add package.json
-  zip.file(
-    "package.json",
-    JSON.stringify(
-      {
-        name: projectName || "ai-website",
-        version: "0.1.0",
-        private: true,
-        dependencies: {
-          react: "^18.2.0",
-          "react-dom": "^18.2.0",
-          "react-scripts": "5.0.1",
+  // Add package.json only if not already provided
+  const hasPackageJson = files.some(f => f.name === "package.json" || f.name === "/package.json");
+  if (!hasPackageJson) {
+    zip.file(
+      "package.json",
+      JSON.stringify(
+        {
+          name: projectName || "ai-website",
+          version: "0.1.0",
+          private: true,
+          dependencies: {
+            react: "^18.2.0",
+            "react-dom": "^18.2.0",
+            "react-scripts": "5.0.1",
+          },
+          scripts: {
+            start: "react-scripts start",
+            build: "react-scripts build",
+            test: "react-scripts test",
+            eject: "react-scripts eject",
+          },
+          eslintConfig: {
+            extends: ["react-app"],
+          },
+          browserslist: {
+            production: [">0.2%", "not dead", "not op_mini all"],
+            development: [
+              "last 1 chrome version",
+              "last 1 firefox version",
+              "last 1 safari version",
+            ],
+          },
         },
-        scripts: {
-          start: "react-scripts start",
-          build: "react-scripts build",
-          test: "react-scripts test",
-          eject: "react-scripts eject",
-        },
-        eslintConfig: {
-          extends: ["react-app"],
-        },
-        browserslist: {
-          production: [">0.2%", "not dead", "not op_mini all"],
-          development: [
-            "last 1 chrome version",
-            "last 1 firefox version",
-            "last 1 safari version",
-          ],
-        },
-      },
-      null,
-      2
-    )
-  );
+        null,
+        2
+      )
+    );
+  }
 
   // Add README
   zip.file(
@@ -73,10 +83,12 @@ npm start
 `
   );
 
-  // Add public/index.html
-  zip.file(
-    "public/index.html",
-    `<!DOCTYPE html>
+  // Add public/index.html only if not already provided
+  const hasIndexHtml = files.some(f => f.name === "public/index.html" || f.name === "/public/index.html");
+  if (!hasIndexHtml) {
+    zip.file(
+      "public/index.html",
+      `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -90,7 +102,8 @@ npm start
     <div id="root"></div>
   </body>
 </html>`
-  );
+    );
+  }
 
   return await zip.generateAsync({ type: "blob" });
 }

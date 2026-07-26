@@ -22,12 +22,12 @@ type SandpackFileMap = Record<string, SandpackFileEntry>;
  * These are the lowest-priority defaults — any file in the `files` prop
  * with the same key will override them.
  */
-const BASE_FILES: SandpackFileMap = {
-  "/index.js": {
+export const BASE_FILES: SandpackFileMap = {
+  "/src/index.js": {
     code: `import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './src/App.jsx';
-import './src/styles.css';
+import App from './App.jsx';
+import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -50,8 +50,27 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 </html>`,
     hidden: true,
   },
-};
+  "/src/App.jsx" : {
+    code: `import React from 'react';
+export default function App() {
+  return <div>Ready to render...</div>;
+}`,
+    hidden: false,
+  },
+  "/src/styles.css": {
+    code: `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}`,
+    hidden: true,
+  },
+};
 /**
  * Default App.jsx shown before any code is generated.
  */
@@ -88,8 +107,8 @@ export default function SandpackWrapper({
   };
   // console.log("dependencies: ", dependencies);
   // console.log("code prop: ", code);
-  console.log("files prop: ", files);
-  console.log("dependencies prop: ", dependencies);
+  // console.log("files prop: ", files);
+  // console.log("dependencies prop: ", dependencies);
 
   const latestDependencies: Record<string, string> = Object.fromEntries(
   Object.keys(dependencies ?? {}).map((key) => [key, "latest"])

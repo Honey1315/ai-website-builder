@@ -509,7 +509,28 @@ Check:
 * components imported as named but exported as default
 * every rendered JSX component resolves to a valid exported component
   `;
-  export function formatPrompt(template: string, variables: Record<string, string>): string {
+
+export const GENERATE_PROJECT_METADATA_PROMPT_TEMPLATE = `
+${SYSTEM_PROMPT}
+
+User Request:
+{prompt}
+
+Generate a project name and description based on the above request.
+
+Rules:
+* Return ONLY valid JSON
+* Name must be concise and descriptive (maximum 50 characters)
+* Description should be engaging and explain what the project does (1-2 sentences)
+* Do not include any additional text, explanation, or formatting
+
+JSON structure:
+{
+  "name": "project name here",
+  "description": "project description here"
+}
+`;
+export function formatPrompt(template: string, variables: Record<string, string>): string {
   let result = template;
 
   Object.entries(variables).forEach(([key, value]) => {
@@ -520,4 +541,4 @@ Check:
   });
 
   return result;
-  }
+}
