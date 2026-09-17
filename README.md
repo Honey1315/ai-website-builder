@@ -48,6 +48,12 @@ An AI-powered website builder built with Next.js that allows users to generate w
 Create a `.env.local` file in the root directory with:
 
 ```env
+# NVIDIA API Configuration
+NVIDIA_API_KEY=your_nvidia_api_key
+
+# OpenRouter API Configuration (optional — enables the OpenRouter model provider)
+OPENROUTER_API_KEY=your_openrouter_api_key
+
 # Supabase Configuration
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
@@ -66,6 +72,7 @@ NEXTAUTH_URL=http://localhost:3000
 **Important**: 
 - For Supabase, you need to get your `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from your Supabase project settings
 - For production, use a strong random string for `NEXTAUTH_SECRET` and set `NEXTAUTH_URL` to your production domain
+- `NVIDIA_API_KEY` (from [build.nvidia.com](https://build.nvidia.com/)) and `OPENROUTER_API_KEY` (from [openrouter.ai/keys](https://openrouter.ai/keys)) power the two selectable model providers in the builder. NVIDIA is the default; add the OpenRouter key to use OpenRouter models
 
 ### Development
 

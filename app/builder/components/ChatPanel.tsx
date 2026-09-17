@@ -6,22 +6,25 @@ export default function ChatPanel({ onSend }: any) {
   const [message, setMessage] = useState("");
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3 h-full">
       <textarea
-        className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
-        placeholder="Refine your app (e.g., make navbar sticky)"
+        className="flex-1 w-full p-4 bg-[#0a0f16] border border-secondary-800 text-secondary-300 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 rounded-none placeholder:text-secondary-700 resize-none transition-colors"
+        placeholder="> input refinement parameters (e.g., make navbar sticky)..."
         value={message}
         onChange={(e) => setMessage(e.target.value)}
       />
 
       <button
-        className="builder-btn px-4 py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none disabled:opacity-50 border border-primary-500"
         onClick={() => {
+          if (!message.trim()) return;
           onSend(message);
           setMessage("");
         }}
+        disabled={!message.trim()}
       >
-        Send
+        <span>Transmit</span>
+        <span className="font-sans">↗</span>
       </button>
     </div>
   );

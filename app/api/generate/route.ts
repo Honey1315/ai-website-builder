@@ -4,6 +4,10 @@ import { AIService } from "@/services/ai.service";
 
 import { getLanguageFromFilename } from "@/lib/extractCode";
 
+import { resolveProviderOptions } from "@/lib/openrouter";
+
+import type { ProviderOptions } from "@/types/ai";
+
 import {
 
   isCodegenFile,
@@ -150,17 +154,19 @@ async function runContractFirstStream(
 
   prompt: string,
 
-  controller: ReadableStreamDefaultController<Uint8Array>
+  controller: ReadableStreamDefaultController<Uint8Array>,
+
+  options: ProviderOptions = {}
 
 ) {
 
-  const structure = await AIService.generateStructure(prompt);
+  const structure = await AIService.generateStructure(prompt, options);
 
   controller.enqueue(streamEvent({ type: "structure_paths", paths: structure }));
 
   // console.log("Generated structure:", structure); // Log the generated structure for debugging
 
-  const manifest = await AIService.generateManifest(prompt, structure);
+  const manifest = await AIService.generateManifest(prompt, structure, options);
 
   controller.enqueue(streamEvent({ type: "manifest", manifest }));
 
@@ -198,7 +204,11 @@ async function runContractFirstStream(
 
       fileName,
 
-      summaries
+      summaries,
+
+      [],
+
+      options
 
     );
 
@@ -218,7 +228,7 @@ async function runContractFirstStream(
 
 
 
-    summaries.set(fileName, await AIService.generateFileSummary(fileName, file.content));
+    summaries.set(fileName, await AIService.generateFileSummary(fileName, file.content, options));
 
 
 
@@ -300,7 +310,9 @@ async function runContractFirstStream(
 
       validation.mismatches,
 
-      summaries
+      summaries,
+
+      options
 
     );
 
@@ -388,9 +400,9 @@ export async function POST(request: NextRequest) {
 
   try {
 
-    const { prompt } = await request.json();
+    const body = await request.json();
 
-
+    const { prompt } = body as { prompt?: string };
 
     if (!prompt) {
 
@@ -404,7 +416,7 @@ export async function POST(request: NextRequest) {
 
     }
 
-
+    const options: ProviderOptions = resolveProviderOptions(body);
 
     if (request.headers.get("accept")?.includes("text/event-stream")) {
 
@@ -414,7 +426,7 @@ export async function POST(request: NextRequest) {
 
           try {
 
-            await runContractFirstStream(prompt, controller);
+            await runContractFirstStream(prompt, controller, options);
 
           } catch (error) {
 
@@ -456,7 +468,7 @@ export async function POST(request: NextRequest) {
 
 
 
-    const result = await AIService.generateCode(prompt);
+    const result = await AIService.generateCode(prompt, options);
 
 
 

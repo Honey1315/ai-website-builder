@@ -11,9 +11,12 @@ import SandpackWrapper, { BASE_FILES } from "./components/SandpackWrapper";
 import SandpackFileExplorer from "./components/SandpackFileExplorer";
 import DeployButton from "./components/DeployButton";
 import DeployModal from "./components/DeployModal";
+import ModelSelector from "./components/ModelSelector";
 import type { ProjectManifest } from "@/types/contract";
+import type { ModelProvider } from "@/types/ai";
 import { createBrowserClient } from "@supabase/ssr";
 import { Project } from "@/types/project";
+import { DEFAULT_MODEL_PROVIDER, MODEL_CATALOG } from "@/utils/constants";
 
 type RefineApiResponse = {
   code?: string;
@@ -31,9 +34,9 @@ function mergeFile(files: FileData[], nextFile: FileData) {
 
 function RefineWaitingStatus() {
   return (
-    <div className="builder-status-info p-3 rounded-3xl shrink-0 flex items-center gap-3">
-      <span className="h-4 w-4 rounded-full border-2 border-blue-200 border-t-blue-700 animate-spin" />
-      <span>Refining code...</span>
+    <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center gap-4">
+      <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent animate-spin rounded-none"></div>
+      <span>[SYS] Refining code architecture...</span>
     </div>
   );
 }
@@ -60,6 +63,13 @@ function BuilderPageInner() {
   // Initialized from URL so the state is the single source of truth after mount
   const [projectId, setProjectId] = useState<string | null>(urlProjectId);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [provider, setProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER);
+  const [model, setModel] = useState<string>(MODEL_CATALOG[DEFAULT_MODEL_PROVIDER].defaultModel);
+
+  const handleProviderChange = (nextProvider: ModelProvider) => {
+    setProvider(nextProvider);
+    setModel(MODEL_CATALOG[nextProvider].defaultModel);
+  };
 
   // Stable Supabase client — not recreated on every render
   const supabase = useMemo(
@@ -120,7 +130,7 @@ function BuilderPageInner() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, provider, model }),
       });
 
       if (!res.ok || !res.body) {
@@ -216,6 +226,8 @@ function BuilderPageInner() {
           structure: projectStructure.length > 0 ? projectStructure : files.map((f) => f.name),
           manifest: manifest || undefined,
           files,
+          provider,
+          model,
         }),
       });
 
@@ -274,7 +286,7 @@ function BuilderPageInner() {
       const metadataResponse = await fetch(`/api/project/metadata`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: originalPrompt || "" }),
+        body: JSON.stringify({ prompt: originalPrompt || "", provider, model }),
       });
 
       if (!metadataResponse.ok) {
@@ -366,34 +378,42 @@ function BuilderPageInner() {
     } finally {
       setIsSaving(false);
     }
-  }, [files, originalPrompt, projectId, supabase, router]);
+  }, [files, originalPrompt, projectId, supabase, router, provider, model]);
 
   return (
-    <div className="builder-page min-h-screen flex flex-col gap-4">
+    <div className="min-h-screen flex flex-col bg-[#05080c] text-secondary-50 font-sans relative overflow-hidden">
       {/* HEADER */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <nav className="bg-secondary-900 border-b border-secondary-800 shrink-0 z-10 relative">
+        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">AI</span>
+            <div className="flex items-center gap-4 group">
+              <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
+                <span className="text-primary-400 font-mono text-[10px]">AI</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">Website Builder</span>
+              <span className="text-sm font-display tracking-[0.2em] uppercase text-white hidden sm:block">
+                Workspace
+              </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <ModelSelector
+                provider={provider}
+                model={model}
+                onProviderChange={handleProviderChange}
+                onModelChange={setModel}
+              />
               {isSaving ? (
-                <button disabled className="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg">
-                  Saving...
+                <button disabled className="bg-secondary-800 text-secondary-500 font-mono uppercase tracking-widest text-[10px] px-6 py-2.5 border border-secondary-700 cursor-not-allowed">
+                  [ Saving... ]
                 </button>
               ) : (
                 <button
                   onClick={handleSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="bg-primary-500 hover:bg-primary-400 text-secondary-900 font-bold font-mono uppercase tracking-widest text-[10px] px-6 py-2.5 border border-primary-500 transition-colors"
                 >
-                  Save Project
+                  Save Project _
                 </button>
               )}
-              {saveSuccess && <span className="text-green-600 text-sm">Saved!</span>}
+              {saveSuccess && <span className="text-primary-400 font-mono text-[10px] uppercase tracking-widest animate-pulse">Success</span>}
               <DeployButton onClick={() => setIsDeployModalOpen(true)} disabled={files.length === 0} />
             </div>
           </div>
@@ -409,76 +429,126 @@ function BuilderPageInner() {
 
       {/* Loading overlay when fetching an existing project */}
       {isLoadingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
-            <span className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
-            <span className="text-gray-600 text-sm">Loading project...</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05080c]/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-6 p-12 bg-secondary-900 border border-secondary-800 shadow-2xl relative">
+            {/* Corner accent */}
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-50"></div>
+            
+            <div className="relative w-12 h-12 flex items-center justify-center">
+              <div className="absolute inset-0 border border-secondary-800 rounded-none"></div>
+              <div className="absolute inset-0 border border-primary-400 animate-[spin_2s_linear_infinite] [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"></div>
+              <div className="w-2 h-2 bg-primary-400 animate-pulse"></div>
+            </div>
+            <p className="text-[10px] font-mono text-secondary-500 uppercase tracking-[0.2em]">
+              SYS_Loading_Project...
+            </p>
           </div>
         </div>
       )}
 
-      {/* GENERATE */}
-      <div className="p-4 text-black">
-        <h2 className="text-lg font-semibold mb-3">Generate</h2>
-        <PromptInput onSubmit={generateCode} />
-      </div>
-
-      {/* CHAT */}
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-3 text-black">Refine / Chat</h3>
-        <ChatPanel onSend={refineCode} />
-      </div>
-
-      {/* MAIN CONTENT */}
-      <div className="flex-1 p-6 overflow-auto flex flex-col gap-4">
-        {error && <div className="builder-status-error p-3 rounded-3xl shrink-0">{error}</div>}
-        {loading && (
-          <div className="builder-status-info p-3 rounded-3xl shrink-0">
-            {generationStatus || "Generating code..."}
+      {/* Main Layout - Split Panel Design */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-0">
+        
+        {/* Left Sidebar (Generate & Chat) */}
+        <div className="w-full lg:w-[420px] flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 overflow-y-auto">
+          {/* GENERATE */}
+          <div className="p-6 border-b border-secondary-800">
+            <h2 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-secondary-600 block"></span> 
+              Input Parameters
+            </h2>
+            <PromptInput onSubmit={generateCode} />
           </div>
-        )}
-        {refining && <RefineWaitingStatus />}
-        {manifest && (
-          <div className="builder-status-info p-3 rounded-3xl shrink-0 text-sm">
-            <div className="font-semibold mb-1">Project manifest</div>
-            <div>
-              Components:{" "}
-              {manifest && manifest.components.length > 0
-                ? manifest.components
-                    .map((c) => `${c.name}(${c.props.join(", ")})`)
-                    .join(" · ")
-                : "None"}
-            </div>
-            <div>
-              Stack: {manifest.architecture?.framework ?? 'react'} / {manifest.architecture?.language ?? 'javascript'} /{" "}
-              {manifest.architecture?.styling ?? 'css'}
-            </div>
-          </div>
-        )}
 
-        {!loading && !refining && !isLoadingProject ? (
-          <div className="w-full">
-            <SandpackWrapper
-              code={code}
-              files={files}
-              dependencies={manifest?.packages.dependencies || {}}
-            >
-              <div className="w-full flex flex-col gap-4 p-1">
-                <div className="w-full h-[720px] flex gap-1 shrink-0">
-                  <div className="flex-[2_2_0%] min-w-0 h-full">
-                    <SandpackFileExplorer />
-                  </div>
-                  <div className="flex-[8_8_0%] min-w-0 h-full">
-                    <CodeEditor onSave={setCode} />
+          {/* CHAT */}
+          <div className="flex-1 p-6 flex flex-col min-h-[300px]">
+            <h3 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-primary-400 block"></span> 
+              System Logs / Refine
+            </h3>
+            <ChatPanel onSend={refineCode} />
+          </div>
+        </div>
+
+        {/* Right Workspace (Main Content) */}
+        <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 bg-[#0a0f16] relative">
+          
+          {error && (
+            <div className="border border-danger-500/50 bg-danger-500/10 text-danger-500 p-4 font-mono text-xs tracking-widest uppercase flex gap-4 items-start shrink-0">
+              <span className="font-bold mt-0.5">ERR:</span>
+              <span className="leading-relaxed">{error}</span>
+            </div>
+          )}
+
+          {loading && (
+            <div className="border border-secondary-700 bg-secondary-800/30 p-4 flex items-start gap-4 shrink-0">
+              <div className="w-4 h-4 border border-primary-400 border-t-transparent animate-spin rounded-none mt-0.5"></div>
+              <div className="font-mono text-xs tracking-widest uppercase text-secondary-300">
+                <span className="text-primary-400 block mb-1">[SYS_EXECUTION]</span>
+                {generationStatus || "Executing generation sequence..."}
+              </div>
+            </div>
+          )}
+
+          {refining && <RefineWaitingStatus />}
+
+          {manifest && (
+            <div className="border border-secondary-800 bg-secondary-900/50 p-6 font-mono text-xs text-secondary-400 shrink-0 relative">
+              <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-600 opacity-50"></div>
+              <div className="text-primary-400 uppercase tracking-widest mb-4 border-b border-secondary-800 pb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
+                Project Manifest
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div>
+                  <span className="text-secondary-600 block mb-2 uppercase tracking-widest text-[10px]">Registered Components</span>
+                  <div className="leading-relaxed">
+                    {manifest && manifest.components.length > 0
+                      ? manifest.components
+                          .map((c) => `${c.name}(${c.props.join(", ")})`)
+                          .join(" · ")
+                      : "None"}
                   </div>
                 </div>
-                <div className="w-full h-[720px] shrink-0">
-                  <PreviewPanel />
+                <div>
+                  <span className="text-secondary-600 block mb-2 uppercase tracking-widest text-[10px]">Architecture Stack</span>
+                  <div className="leading-relaxed">
+                    [{manifest.architecture?.framework ?? 'react'}] / [{manifest.architecture?.language ?? 'javascript'}] / [{manifest.architecture?.styling ?? 'css'}]
+                  </div>
                 </div>
               </div>
-            </SandpackWrapper>
-          </div>
-        ) : null}
+            </div>
+          )}
+
+          {!loading && !refining && !isLoadingProject ? (
+            <div className="w-full flex-1 flex flex-col min-h-0">
+              <SandpackWrapper
+                code={code}
+                files={files}
+                dependencies={manifest?.packages.dependencies || {}}
+              >
+                <div className="w-full flex flex-col gap-6">
+                  {/* Editor Section */}
+                  <div className="w-full h-[500px] xl:h-[600px] flex gap-4 shrink-0">
+                    <div className="flex-[2_2_0%] min-w-0 h-full border border-secondary-800 bg-secondary-900/50">
+                      <SandpackFileExplorer />
+                    </div>
+                    <div className="flex-[8_8_0%] min-w-0 h-full border border-secondary-800 bg-[#05080c]">
+                      <CodeEditor onSave={setCode} />
+                    </div>
+                  </div>
+                  {/* Preview Section */}
+                  <div className="w-full h-[600px] xl:h-[800px] shrink-0 border border-secondary-800 bg-white relative">
+                    {/* <div className="absolute -top-3 -left-3 bg-secondary-900 border border-secondary-800 text-[10px] font-mono text-primary-400 uppercase tracking-widest px-3 py-1 z-10">
+                      Live_Preview
+                    </div> */}
+                    <PreviewPanel />
+                  </div>
+                </div>
+              </SandpackWrapper>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -490,8 +560,17 @@ export default function BuilderPage() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center bg-gray-50">
-          <span className="h-8 w-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+        <div className="h-screen flex items-center justify-center bg-[#05080c]">
+           <div className="flex flex-col items-center gap-6 p-12 relative">
+             <div className="relative w-12 h-12 flex items-center justify-center">
+               <div className="absolute inset-0 border border-secondary-800 rounded-none"></div>
+               <div className="absolute inset-0 border border-primary-400 animate-[spin_2s_linear_infinite] [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"></div>
+               <div className="w-2 h-2 bg-primary-400 animate-pulse"></div>
+             </div>
+             <p className="text-[10px] font-mono text-secondary-500 uppercase tracking-[0.2em]">
+               SYS_INITIALIZING...
+             </p>
+           </div>
         </div>
       }
     >

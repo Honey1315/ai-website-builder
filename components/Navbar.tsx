@@ -39,20 +39,19 @@ export function Navbar() {
 
   if (loading) {
     return (
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
+      <nav className="bg-[#05080c] border-b border-secondary-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">AI</span>
+            <Link href="/" className="flex items-center gap-4 group">
+              <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
+                <span className="text-primary-400 font-mono text-[10px]">AI</span>
               </div>
-              <span className="text-xl font-bold text-gray-900">
+              <span className="text-sm font-display tracking-[0.2em] uppercase text-white">
                 Website Builder
               </span>
             </Link>
-
             <div className="flex gap-4 items-center">
-              <span className="animate-pulse">Loading...</span>
+              <span className="text-[10px] font-mono text-secondary-600 uppercase tracking-widest animate-pulse">Initializing...</span>
             </div>
           </div>
         </div>
@@ -61,14 +60,14 @@ export function Navbar() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 shadow-sm">
+    <nav className="bg-[#05080c] border-b border-secondary-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">AI</span>
+          <Link href="/" className="flex items-center gap-4 group">
+            <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
+              <span className="text-primary-400 font-mono text-[10px]">AI</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">
+            <span className="text-sm font-display tracking-[0.2em] uppercase text-white">
               Website Builder
             </span>
           </Link>
@@ -78,58 +77,52 @@ export function Navbar() {
             {session && (
               <>
                 <Link href="/projects">
-                  <Button variant="secondary">Projects</Button>
+                  <Button variant="secondary" size="sm">Projects</Button>
                 </Link>
                 <Link href="/builder">
-                  <Button variant="primary">Build</Button>
+                  <Button variant="primary" size="sm">Build _</Button>
                 </Link>
 
                 {/* User menu */}
                 <div className="relative">
                   <button
                     onClick={() => setIsOpen(!isOpen)}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                    className="flex items-center gap-3 px-3 py-2 border border-transparent hover:border-secondary-800 text-xs font-mono text-secondary-400 hover:text-primary-400 transition-colors"
                   >
-                    {session.user.user_metadata.full_name ||
-                      session.user.email?.split("@")[0] ||
-                      "User"}
-
+                    <span>
+                      {session.user.user_metadata.full_name ||
+                        session.user.email?.split("@")[0] ||
+                        "SYS_USER"}
+                    </span>
                     <svg
-                      className={`h-4 w-4 transition-transform ${
-                        isOpen ? "rotate-180" : ""
+                      className={`h-3 w-3 transition-transform ${
+                        isOpen ? "rotate-180 text-primary-400" : ""
                       }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
+                      <path strokeLinecap="square" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
 
                   {/* Dropdown menu */}
                   {isOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-md bg-white shadow-lg ring-1 ring-black/5 z-50">
-                      <div className="px-4 py-2 text-sm text-gray-700">
-                        {session.user.user_metadata.full_name || session.user.email}
+                    <div className="absolute right-0 mt-2 w-56 bg-secondary-900 border border-secondary-800 shadow-2xl z-50">
+                      <div className="px-4 py-3 text-[10px] font-mono text-secondary-500 border-b border-secondary-800 truncate">
+                        ID: {session.user.user_metadata.full_name || session.user.email}
                       </div>
 
-                      <hr />
-
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="sm"
-                        className="w-full justify-start rounded-none"
+                        className="w-full justify-start rounded-none border-t border-transparent hover:border-secondary-800 text-left"
                         onClick={async () => {
                           await supabase.auth.signOut();
                           window.location.href = "/";
                         }}
                       >
-                        Sign out
+                        [ Terminate Session ]
                       </Button>
                     </div>
                   )}
@@ -141,10 +134,10 @@ export function Navbar() {
             {!session && (
               <>
                 <Link href="/builder">
-                  <Button variant="primary">Build</Button>
+                  <Button variant="primary" size="sm">Build _</Button>
                 </Link>
-                <Link href="/auth/signup">
-                  <Button variant="secondary">Sign up</Button>
+                <Link href="/auth/login">
+                  <Button variant="secondary" size="sm">Authenticate</Button>
                 </Link>
               </>
             )}

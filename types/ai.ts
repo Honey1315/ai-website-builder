@@ -4,8 +4,17 @@ import type {
   ValidationMismatch,
 } from "@/types/contract";
 
+export type ModelProvider = "nvidia" | "openrouter";
+
+export interface ProviderOptions {
+  provider?: ModelProvider;
+  model?: string;
+}
+
 export interface GenerateRequest {
   prompt: string;
+  provider?: ModelProvider;
+  model?: string;
 }
 
 export interface GenerateResponse {
@@ -21,6 +30,8 @@ export interface RefineRequest {
   code: string;
   message: string;
   files?: FileData[];
+  provider?: ModelProvider;
+  model?: string;
 }
 
 export interface RefineResponse {

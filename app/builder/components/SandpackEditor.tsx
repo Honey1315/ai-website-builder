@@ -75,30 +75,66 @@ body {
     },
   };
 
-  // console.log("Sandpack files:", files);
+  // Custom technical theme for Sandpack
+  const customTheme = {
+    colors: {
+      surface1: "#05080c",
+      surface2: "#0a0f16",
+      surface3: "#1a202c",
+      clickable: "#a0aec0",
+      base: "#cbd5e0",
+      disabled: "#4a5568",
+      hover: "#e6fffa",
+      accent: "#4fd1c5",
+      error: "#e53e3e",
+      errorSurface: "#fff5f5",
+    },
+    syntax: {
+      plain: "#e2e8f0",
+      comment: { color: "#718096", fontStyle: "italic" },
+      keyword: "#4fd1c5",
+      tag: "#9deee5",
+      punctuation: "#a0aec0",
+      definition: "#c9f7f0",
+      property: "#6bdfd3",
+      static: "#cbd5e0",
+      string: "#68d391",
+    },
+    font: {
+      body: "var(--font-sans), sans-serif",
+      mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+      size: "12px",
+      lineHeight: "20px",
+    },
+  };
 
   return (
-    <SandpackProvider
-      template="react"
-      files={files}
-      customSetup={{
-        dependencies: {
-          react: "latest",
-          "react-dom": "latest",
-        },
-      }}
-      theme="light"
-      options={{
-        autorun: true,
-        autoReload: true,
-      }}
-    >
-      <SandpackLayout style={{ height: "600px" }}>
-        {showBothPanels && (
-          <SandpackCodeEditor />
-        )}
-        <SandpackPreview />
-      </SandpackLayout>
-    </SandpackProvider>
+    <div className="border border-secondary-800 bg-[#05080c] relative group">
+      {/* Decorative corner */}
+      <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-700 opacity-50 z-10 pointer-events-none"></div>
+
+      <SandpackProvider
+        template="react"
+        files={files}
+        customSetup={{
+          dependencies: {
+            react: "latest",
+            "react-dom": "latest",
+          },
+        }}
+        theme={customTheme}
+        options={{
+          autorun: true,
+          autoReload: true,
+        }}
+      >
+        <SandpackLayout style={{ height: "600px", borderRadius: 0, border: "none" }}>
+          {showBothPanels && (
+            <SandpackCodeEditor style={{ height: "100%" }} />
+          )}
+          <SandpackPreview style={{ height: "100%", background: "#ffffff" }} />
+        </SandpackLayout>
+      </SandpackProvider>
+    </div>
   );
 }

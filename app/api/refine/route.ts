@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIService } from "@/services/ai.service";
+import { resolveProviderOptions } from "@/lib/openrouter";
 import type { FileData } from "@/types/ai";
 import type { ProjectManifest } from "@/types/contract";
 
@@ -36,13 +37,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const options = resolveProviderOptions(body);
+
     const result = await AIService.refineCode(message, {
       prompt,
       structure,
       manifest,
       files,
       code,
-    });
+    }, options);
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });

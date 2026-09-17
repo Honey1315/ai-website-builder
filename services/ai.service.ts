@@ -75,6 +75,8 @@ import {
 
   GenerateResponse,
 
+  ProviderOptions,
+
   RefineResponse,
 
 } from "@/types/ai";
@@ -127,7 +129,7 @@ export interface RefineContext {
 
 export class AIService {
 
-  static async generateStructure(prompt: string): Promise<string[]> {
+  static async generateStructure(prompt: string, options: ProviderOptions = {}): Promise<string[]> {
 
     const result = await callWithRetry(async () => {
 
@@ -149,7 +151,7 @@ export class AIService {
 
         },
 
-      ]);
+      ], options);
 
     });
 
@@ -167,7 +169,9 @@ export class AIService {
 
     prompt: string,
 
-    structure: string[]
+    structure: string[],
+
+    options: ProviderOptions = {}
 
   ): Promise<ProjectManifest> {
 
@@ -193,7 +197,7 @@ export class AIService {
 
         },
 
-      ]);
+      ], options);
 
     });
 
@@ -211,7 +215,9 @@ export class AIService {
 
     fileName: string,
 
-    content: string
+    content: string,
+
+    options: ProviderOptions = {}
 
   ): Promise<FileSummary> {
 
@@ -235,7 +241,7 @@ export class AIService {
 
         },
 
-      ]);
+      ], options);
 
     });
 
@@ -259,7 +265,9 @@ export class AIService {
 
     summaries: Map<string, FileSummary>,
 
-    mismatches: ValidationMismatch[] = []
+    mismatches: ValidationMismatch[] = [],
+
+    options: ProviderOptions = {}
 
   ): Promise<FileData> {
 
@@ -333,7 +341,7 @@ export class AIService {
 
         },
 
-      ]);
+      ], options);
 
     });
 
@@ -391,7 +399,9 @@ export class AIService {
 
     mismatches: ValidationMismatch[],
 
-    summaries: Map<string, FileSummary>
+    summaries: Map<string, FileSummary>,
+
+    options: ProviderOptions = {}
 
   ): Promise<FileData[]> {
 
@@ -445,7 +455,9 @@ export class AIService {
 
           summaries,
 
-          fileMismatches
+          fileMismatches,
+
+          options
 
         );
 
@@ -453,7 +465,7 @@ export class AIService {
 
         fileMap.set(fileName, regenerated);
 
-        summaries.set(fileName, await AIService.generateFileSummary(fileName, regenerated.content));
+        summaries.set(fileName, await AIService.generateFileSummary(fileName, regenerated.content, options));
 
       }
 
@@ -483,13 +495,13 @@ export class AIService {
 
 
 
-  static async generateCode(prompt: string): Promise<ContractGenerationResult> {
+  static async generateCode(prompt: string, options: ProviderOptions = {}): Promise<ContractGenerationResult> {
 
     try {
 
-      const structure = await AIService.generateStructure(prompt);
+      const structure = await AIService.generateStructure(prompt, options);
 
-      const manifest = await AIService.generateManifest(prompt, structure);
+      const manifest = await AIService.generateManifest(prompt, structure, options);
 
       const generatedFiles: FileData[] = [];
 
@@ -509,7 +521,9 @@ for (const fileName of orderedManifestFiles(manifest)) {
     structure,
     manifest,
     fileName,
-    summaries
+    summaries,
+    [],
+    options
   );
 
   // console.log("Generated file:", file.name);
@@ -542,7 +556,9 @@ for (const fileName of orderedManifestFiles(manifest)) {
 
           validation.mismatches,
 
-          summaries
+          summaries,
+
+          options
 
         );
 
@@ -660,7 +676,9 @@ for (const fileName of orderedManifestFiles(manifest)) {
 
     message: string,
 
-    context: RefineContext = {}
+    context: RefineContext = {},
+
+    options: ProviderOptions = {}
 
   ): Promise<RefineResponse> {
 
@@ -724,7 +742,7 @@ for (const fileName of orderedManifestFiles(manifest)) {
 
           },
 
-        ]);
+        ], options);
 
       });
 
@@ -754,7 +772,8 @@ for (const fileName of orderedManifestFiles(manifest)) {
   }
 
   static async generateProjectMetadata(
-    prompt: string
+    prompt: string,
+    options: ProviderOptions = {}
   ): Promise<{ name: string; description: string }> {
     try {
       const result = await callWithRetry(async () => {
@@ -767,7 +786,7 @@ for (const fileName of orderedManifestFiles(manifest)) {
             role: "user",
             content: formattedPrompt,
           },
-        ]);
+        ], options);
       });
 
       // Parse the JSON response

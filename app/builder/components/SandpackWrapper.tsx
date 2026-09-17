@@ -71,12 +71,6 @@ body {
     hidden: true,
   },
 };
-/**
- * Default App.jsx shown before any code is generated.
- */
-const DEFAULT_APP = `export default function App() {
-  return <div>Ready to render...</div>;
-}`;
 
 /**
  * Default minimal global CSS — only used when no CSS file is provided.
@@ -93,7 +87,6 @@ body {
 }`;
 
 export default function SandpackWrapper({
-  // code,
   files,
   children,
   dependencies,
@@ -105,15 +98,10 @@ export default function SandpackWrapper({
     "react-dom": "latest",
     "react-is" : "latest",
   };
-  // console.log("dependencies: ", dependencies);
-  // console.log("code prop: ", code);
-  // console.log("files prop: ", files);
-  // console.log("dependencies prop: ", dependencies);
 
   const latestDependencies: Record<string, string> = Object.fromEntries(
-  Object.keys(dependencies ?? {}).map((key) => [key, "latest"])
-);
-
+    Object.keys(dependencies ?? {}).map((key) => [key, "latest"])
+  );
 
   if (files && files.length > 0) {
     // Merge provided files — normalise paths to absolute sandpack keys
@@ -128,25 +116,40 @@ export default function SandpackWrapper({
     if (!hasCss) {
       sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
     }
-
-  //   // If no App.jsx was provided among the files, fall back to code prop
-  //   const hasApp = files.some(
-  //     (f) => f.name === "src/App.jsx" || f.name === "/src/App.jsx"
-  //   );
-  //   if (!hasApp) {
-  //     sandpackFiles["/src/App.jsx"] = {
-  //       code: code || DEFAULT_APP,
-  //       hidden: false,
-  //     };
-  //   }
-  // } else {
-  //   // No files at all — use code prop as App.jsx + default CSS
-  //   sandpackFiles["/src/App.jsx"] = {
-  //     code: code || DEFAULT_APP,
-  //     hidden: false,
-  //   };
-  //   sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
   }
+
+  // Custom technical theme for Sandpack
+  const customTheme = {
+    colors: {
+      surface1: "#05080c",
+      surface2: "#0a0f16",
+      surface3: "#1a202c",
+      clickable: "#a0aec0",
+      base: "#cbd5e0",
+      disabled: "#4a5568",
+      hover: "#e6fffa",
+      accent: "#4fd1c5",
+      error: "#e53e3e",
+      errorSurface: "#fff5f5",
+    },
+    syntax: {
+      plain: "#e2e8f0",
+      comment: { color: "#718096", fontStyle: "italic" },
+      keyword: "#4fd1c5",
+      tag: "#9deee5",
+      punctuation: "#a0aec0",
+      definition: "#c9f7f0",
+      property: "#6bdfd3",
+      static: "#cbd5e0",
+      string: "#68d391",
+    },
+    font: {
+      body: "var(--font-sans), sans-serif",
+      mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+      size: "12px",
+      lineHeight: "20px",
+    },
+  };
 
   return (
     <SandpackProvider
@@ -158,14 +161,14 @@ export default function SandpackWrapper({
           ...latestDependencies,
         },
       }}
-      theme="dark"
+      theme={customTheme}
       options={{
         autorun: true,
         autoReload: true,
         activeFile: "/src/App.jsx",
       }}
     >
-      <SandpackLayout style={{ height: "100%" }}>
+      <SandpackLayout style={{ height: "100%", background: "transparent", border: "none", borderRadius: 0 }}>
         {children}
       </SandpackLayout>
     </SandpackProvider>
