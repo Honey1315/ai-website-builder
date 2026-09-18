@@ -8,7 +8,8 @@ import PreviewPanel from "./components/PreviewPanel";
 import CodeEditor from "./components/CodeEditor";
 import ChatPanel from "./components/ChatPanel";
 import SandpackWrapper, { BASE_FILES } from "./components/SandpackWrapper";
-import SandpackFileExplorer from "./components/SandpackFileExplorer";
+// import SandpackFileExplorer from "./components/SandpackFileExplorer";
+import SandpackSidebar from "./components/SandpackSidebar";
 import DeployButton from "./components/DeployButton";
 import DeployModal from "./components/DeployModal";
 import ModelSelector from "./components/ModelSelector";
@@ -17,6 +18,7 @@ import type { ModelProvider } from "@/types/ai";
 import { createBrowserClient } from "@supabase/ssr";
 import { Project } from "@/types/project";
 import { DEFAULT_MODEL_PROVIDER, MODEL_CATALOG } from "@/utils/constants";
+import Link from "next/link";
 
 type RefineApiResponse = {
   code?: string;
@@ -384,16 +386,18 @@ function BuilderPageInner() {
     <div className="min-h-screen flex flex-col bg-[#05080c] text-secondary-50 font-sans relative overflow-hidden">
       {/* HEADER */}
       <nav className="bg-secondary-900 border-b border-secondary-800 shrink-0 z-10 relative">
-        <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-480 mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4 group">
-              <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
-                <span className="text-primary-400 font-mono text-[10px]">AI</span>
+            <Link href="/">
+              <div className="flex items-center gap-4 group">
+                <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
+                  <span className="text-primary-400 font-mono text-[10px]">AI</span>
+                </div>
+                <span className="text-sm font-display tracking-[0.2em] uppercase text-white hidden sm:block">
+                  Workspace
+                </span>
               </div>
-              <span className="text-sm font-display tracking-[0.2em] uppercase text-white hidden sm:block">
-                Workspace
-              </span>
-            </div>
+            </Link>
             <div className="flex items-center gap-4">
               <ModelSelector
                 provider={provider}
@@ -450,7 +454,7 @@ function BuilderPageInner() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-0">
         
         {/* Left Sidebar (Generate & Chat) */}
-        <div className="w-full lg:w-[420px] flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 overflow-y-auto">
+        <div className="w-full lg:w-105 flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 overflow-y-auto">
           {/* GENERATE */}
           <div className="p-6 border-b border-secondary-800">
             <h2 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -461,7 +465,7 @@ function BuilderPageInner() {
           </div>
 
           {/* CHAT */}
-          <div className="flex-1 p-6 flex flex-col min-h-[300px]">
+          <div className="flex-1 p-6 flex flex-col min-h-75">
             <h3 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-primary-400 block"></span> 
               System Logs / Refine
@@ -528,17 +532,17 @@ function BuilderPageInner() {
                 dependencies={manifest?.packages.dependencies || {}}
               >
                 <div className="w-full flex flex-col gap-6">
-                  {/* Editor Section */}
-                  <div className="w-full h-[500px] xl:h-[600px] flex gap-4 shrink-0">
-                    <div className="flex-[2_2_0%] min-w-0 h-full border border-secondary-800 bg-secondary-900/50">
-                      <SandpackFileExplorer />
+                {/* Editor Section */}
+                  <div className="w-full h-125 xl:h-150 flex gap-4 shrink-0">
+                    <div className="flex-[2_2_0%] min-w-0 h-full">
+                      <SandpackSidebar /> {/* <-- New Component */}
                     </div>
                     <div className="flex-[8_8_0%] min-w-0 h-full border border-secondary-800 bg-[#05080c]">
                       <CodeEditor onSave={setCode} />
                     </div>
                   </div>
                   {/* Preview Section */}
-                  <div className="w-full h-[600px] xl:h-[800px] shrink-0 border border-secondary-800 bg-white relative">
+                  <div className="w-full h-150 xl:h-200 shrink-0 border border-secondary-800 bg-white relative">
                     {/* <div className="absolute -top-3 -left-3 bg-secondary-900 border border-secondary-800 text-[10px] font-mono text-primary-400 uppercase tracking-widest px-3 py-1 z-10">
                       Live_Preview
                     </div> */}

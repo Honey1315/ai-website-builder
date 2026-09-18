@@ -3,9 +3,16 @@ import { AIService } from "@/services/ai.service";
 import { resolveProviderOptions } from "@/lib/openrouter";
 import type { FileData } from "@/types/ai";
 import type { ProjectManifest } from "@/types/contract";
+import { getAuthUserId } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const {
       code,

@@ -25,8 +25,6 @@ export default function SignupPage() {
 
       if (signUpError) throw signUpError;
 
-      // Note: The user will be redirected to the callback URL
-      // We'll handle the session in the callback route
     } catch (err: any) {
       setError(err.message || 'An error occurred during sign-up');
       console.error('Google sign-up error:', err);

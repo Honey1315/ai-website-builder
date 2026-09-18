@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createProjectZip } from "@/lib/zipExporter";
 import { FileData } from "@/types/ai";
+import { getAuthUserId } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { projectName, code, files } = await request.json();
 
     if (!projectName || !code) {

@@ -156,6 +156,7 @@ export default function SandpackWrapper({
       template="react"
       files={sandpackFiles}
       customSetup={{
+        entry: "/src/index.js",
         dependencies: {
           ...DEFAULT_DEPENDENCIES,
           ...latestDependencies,

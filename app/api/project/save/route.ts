@@ -2,22 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { Project } from "@/types/project";
 import { prisma } from "@/lib/prisma";
 import { FileData } from "@/types/ai";
+import { getAuthUserId, verifyProjectOwnership } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const projectData: Project = await request.json();
     console.log("Received project data:", projectData);
-    if (!projectData.id || !projectData.name || !projectData.userId) {
+    if (!projectData.id || !projectData.name) {
       return NextResponse.json(
-        { error: "Project ID, name, and user ID are required" },
+        { error: "Project ID and name are required" },
         { status: 400 }
       );
     }
 
-
-
-    // Extract userId to satisfy TypeScript's strict checking
-    const userId = projectData.userId;
+    // Verify ownership if project ID exists (update case)
+    if (projectData.id) {
+      await verifyProjectOwnership(projectData.id, userId);
+    }
 
     // Start a transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
@@ -84,23 +91,29 @@ export async function POST(request: NextRequest) {
     const responseProject: Project = {
       id: projectWithFiles.id,
       name: projectWithFiles.name,
-      description: projectWithFiles.description ?? undefined, 
-      code: "", 
+      description: projectWithFiles.description ?? undefined,
+      code: "",
       files: (projectWithFiles as any).project_files.map((file: any) => ({
         name: file.path,
         content: file.content,
-        language: file.language ?? undefined, 
+        language: file.language ?? undefined,
       })),
       createdAt: projectWithFiles.created_at,
       updatedAt: projectWithFiles.updated_at,
       userId: projectWithFiles.user_id,
       thumbnail: projectWithFiles.thumbnail ?? undefined,
-      isPublic: false, 
+      isPublic: false,
     };
 
     return NextResponse.json(responseProject);
   } catch (error) {
     console.error("Error saving project:", error);
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (error instanceof Error && error.message.includes('Forbidden')) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }
@@ -110,10 +123,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all projects or single project by ID
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const projectId = request.nextUrl.searchParams.get("id");
 
     if (projectId) {
+      // Verify ownership of the specific project
+      await verifyProjectOwnership(projectId, userId);
+
       const project = await prisma.projects.findUnique({
         where: { id: projectId },
         include: {
@@ -132,8 +153,8 @@ export async function GET(request: NextRequest) {
       const projectResponse: Project = {
         id: project.id,
         name: project.name,
-        description: project.description ?? undefined, 
-        code: "", 
+        description: project.description ?? undefined,
+        code: "",
         files: (project as any).project_files.map((file: any) => ({
           name: file.path,
           content: file.content,
@@ -148,8 +169,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(projectResponse);
     }
 
-    // Get all projects
+    // Get all projects for the authenticated user only
     const projects = await prisma.projects.findMany({
+      where: { user_id: userId },
       include: {
         project_files: true,
       },
@@ -160,23 +182,29 @@ export async function GET(request: NextRequest) {
     const projectsResponse: Project[] = projects.map((project) => ({
       id: project.id,
       name: project.name,
-      description: project.description ?? undefined, 
-      code: "", 
+      description: project.description ?? undefined,
+      code: "",
       files: (project as any).project_files.map((file: any) => ({
         name: file.path,
         content: file.content,
-        language: file.language ?? undefined, 
+        language: file.language ?? undefined,
       })),
       createdAt: project.created_at,
       updatedAt: project.updated_at,
       userId: project.user_id,
-      thumbnail: project.thumbnail ?? undefined, 
-      isPublic: false, 
+      thumbnail: project.thumbnail ?? undefined,
+      isPublic: false,
     }));
 
     return NextResponse.json(projectsResponse);
   } catch (error) {
     console.error("Error fetching projects:", error);
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (error instanceof Error && error.message.includes('Forbidden')) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }
@@ -186,6 +214,12 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const projectId = request.nextUrl.searchParams.get("id");
 
     if (!projectId) {
@@ -195,7 +229,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Delete the project and its files (cascade delete should handle files)
+    // Verify ownership before deleting
+    await verifyProjectOwnership(projectId, userId);
+
     await prisma.projects.delete({
       where: { id: projectId },
     });
@@ -203,6 +239,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting project:", error);
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (error instanceof Error && error.message.includes('Forbidden')) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (error instanceof Error && error.message === 'Project not found') {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }

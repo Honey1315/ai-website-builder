@@ -15,25 +15,20 @@ export const MODEL_CATALOG: Record<ModelProvider, ModelCatalogEntry> = {
   nvidia: {
     label: "NVIDIA",
     models: [
-      "openai/gpt-oss-120b",
       "nvidia/nemotron-3-super-120b-a12b",
+      "nvidia/nemotron-3-ultra-550b-a55b",
       "qwen/qwen3-next-80b-a3b-instruct",
       "microsoft/phi-4-mini-instruct",
     ],
-    defaultModel: "openai/gpt-oss-120b",
+    defaultModel: "nvidianvidia/nemotron-3-ultra-550b-a55b",
   },
   openrouter: {
     label: "OpenRouter",
     models: [
-      "anthropic/claude-3.5-sonnet",
-      "openai/gpt-4o-mini",
-      "google/gemini-2.0-flash-001",
-      "meta-llama/llama-3.3-70b-instruct",
       "poolside/laguna-m.1:free",
       "qwen/qwen3-next-80b-a3b-instruct:free",
-      "stealth/ox-alpha",
     ],
-    defaultModel: "stealth/ox-alpha",
+    defaultModel: "poolside/laguna-m.1:free",
   },
 };
 

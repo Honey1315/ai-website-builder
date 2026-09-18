@@ -6,6 +6,8 @@ import { getLanguageFromFilename } from "@/lib/extractCode";
 
 import { resolveProviderOptions } from "@/lib/openrouter";
 
+import { getAuthUserId } from "@/lib/auth";
+
 import type { ProviderOptions } from "@/types/ai";
 
 import {
@@ -399,9 +401,13 @@ async function runContractFirstStream(
 export async function POST(request: NextRequest) {
 
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = await request.json();
-
     const { prompt } = body as { prompt?: string };
 
     if (!prompt) {
@@ -416,7 +422,7 @@ export async function POST(request: NextRequest) {
 
     }
 
-    const options: ProviderOptions = resolveProviderOptions(body);
+    const options = resolveProviderOptions(body);
 
     if (request.headers.get("accept")?.includes("text/event-stream")) {
 

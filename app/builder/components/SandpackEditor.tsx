@@ -91,7 +91,7 @@ body {
     },
     syntax: {
       plain: "#e2e8f0",
-      comment: { color: "#718096", fontStyle: "italic" },
+      comment: { color: "#718096", fontStyle: "italic" as const },
       keyword: "#4fd1c5",
       tag: "#9deee5",
       punctuation: "#a0aec0",
