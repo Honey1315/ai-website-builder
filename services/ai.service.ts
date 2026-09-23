@@ -347,6 +347,12 @@ export class AIService {
 
         const extracted = extractMultipleFiles(result);
         if (extracted.length > 0) {
+          // If extractor defaulted to App.jsx because of missing // FILE: marker, bind to targetFile.name
+          for (const item of extracted) {
+            if (extracted.length === 1 && item.name === "src/App.jsx" && targetFile.name !== "src/App.jsx") {
+              item.name = targetFile.name;
+            }
+          }
           console.log("extracted: ", extracted);
           if (AIService.detectTruncatedOutput(extracted)) {
             return { code: "", error: `Refinement produced incomplete output for ${targetFile.name}.` };

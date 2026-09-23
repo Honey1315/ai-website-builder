@@ -37,67 +37,76 @@ function SandpackErrorObserver({
 }) {
   const { sandpack, listen } = useSandpack();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingErrorRef = useRef<string | null>(null);
+  const activeErrorRef = useRef<string | null>(null);
 
-  const scheduleErrorNotification = useCallback(
+  const notifyError = useCallback(
     (rawError: string) => {
       const cleaned = cleanErrorMessage(rawError);
       if (!cleaned) return;
-      pendingErrorRef.current = cleaned;
+
+      // Don't overwrite an existing specific error with a generic render error message
+      if (
+        activeErrorRef.current &&
+        (cleaned.includes("[PREVIEW_RENDER_ERROR]") ||
+          cleaned.startsWith("The above error occurred in") ||
+          cleaned === "Script error.")
+      ) {
+        return;
+      }
+
+      activeErrorRef.current = cleaned;
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
 
-      // 5-second debounce gives large Vite apps and CDN packages ample time to settle
+      // 400ms debounce ensures errors are promptly delivered to auto-fix and chat
       timerRef.current = setTimeout(() => {
-        if (pendingErrorRef.current) {
-          onErrorChange?.(pendingErrorRef.current);
+        if (activeErrorRef.current) {
+          onErrorChange?.(activeErrorRef.current);
         }
-      }, 5000);
+      }, 400);
     },
     [onErrorChange]
   );
 
-  const clearErrorNotification = useCallback(() => {
+  const clearError = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    pendingErrorRef.current = null;
+    activeErrorRef.current = null;
     onErrorChange?.(null);
   }, [onErrorChange]);
 
   // 1. Listen to Sandpack internal bundler errors
   useEffect(() => {
     if (sandpack.error) {
-      scheduleErrorNotification(sandpack.error.message);
+      notifyError(sandpack.error.message);
     }
-  }, [sandpack.error, scheduleErrorNotification]);
+  }, [sandpack.error, notifyError]);
 
   // 2. Listen to Sandpack protocol messages
   useEffect(() => {
     const unsubscribe = listen((message: any) => {
-      if (message.type === "start") {
-        clearErrorNotification();
-      } else if (message.type === "action" && message.action === "show-error") {
+      if (message.type === "action" && message.action === "show-error") {
         const msg = message.title || message.message;
-        if (msg) scheduleErrorNotification(msg);
+        if (msg) notifyError(msg);
       } else if (
         message.type === "action" &&
         message.action === "notification" &&
         message.notificationType === "error"
       ) {
-        if (message.title) scheduleErrorNotification(message.title);
+        if (message.title) notifyError(message.title);
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [listen, clearErrorNotification, scheduleErrorNotification]);
+  }, [listen, notifyError]);
 
-  // 3. Listen to cross-frame postMessage events sent from /index.html and /src/main.jsx
+  // 3. Listen to cross-frame postMessage events sent from /public/index.html and /index.js
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
@@ -105,11 +114,12 @@ function SandpackErrorObserver({
       if (event.data.type === "SANDPACK_PREVIEW_ERROR") {
         const msg = event.data.message;
         if (msg) {
-          scheduleErrorNotification(msg);
+          notifyError(msg);
         }
       } else if (event.data.type === "SANDPACK_PREVIEW_SUCCESS") {
+        // Only clear when there are genuinely no bundler or runtime errors
         if (!sandpack.error) {
-          clearErrorNotification();
+          clearError();
         }
       }
     };
@@ -121,7 +131,7 @@ function SandpackErrorObserver({
         clearTimeout(timerRef.current);
       }
     };
-  }, [sandpack.error, clearErrorNotification, scheduleErrorNotification]);
+  }, [sandpack.error, clearError, notifyError]);
 
   return null;
 }
@@ -145,30 +155,45 @@ const App = AppModule.default || AppModule.App || Object.values(AppModule).find(
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-  componentDidCatch(error) {
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
     try {
+      const errorMsg = error?.stack || error?.message || String(error);
+      const componentStack = errorInfo?.componentStack || "";
       window.parent.postMessage({
         type: "SANDPACK_PREVIEW_ERROR",
-        message: error?.message || String(error)
+        message: errorMsg + (componentStack ? "\\nComponent Stack:" + componentStack : "")
       }, "*");
     } catch(e) {}
   }
   render() {
     if (this.state.hasError) {
+      const errorMsg = this.state.error?.message || String(this.state.error);
+      const stack = this.state.error?.stack || this.state.errorInfo?.componentStack || "";
       return (
         <div style={{ padding: '24px', color: '#f87171', fontFamily: 'monospace', backgroundColor: '#090d16', minHeight: '100vh', border: '1px solid #ef4444' }}>
           <h2 style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#fca5a5' }}>⚡ [PREVIEW_RENDER_ERROR]</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.5' }}>{this.state.error?.message || String(this.state.error)}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.5', color: '#fecaca', marginBottom: '12px' }}>{errorMsg}</pre>
+          {stack && <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px', color: '#9ca3af', maxHeight: '200px', overflow: 'auto' }}>{stack}</pre>}
         </div>
       );
     }
     return this.props.children;
   }
+}
+
+function SuccessNotifier() {
+  React.useEffect(() => {
+    try {
+      window.parent.postMessage({ type: "SANDPACK_PREVIEW_SUCCESS" }, "*");
+    } catch(e) {}
+  }, []);
+  return null;
 }
 
 try {
@@ -179,18 +204,16 @@ try {
       <React.StrictMode>
         <ErrorBoundary>
           <App />
+          <SuccessNotifier />
         </ErrorBoundary>
       </React.StrictMode>
     );
-    try {
-      window.parent.postMessage({ type: "SANDPACK_PREVIEW_SUCCESS" }, "*");
-    } catch(e) {}
   }
 } catch (err) {
   try {
     window.parent.postMessage({
       type: "SANDPACK_PREVIEW_ERROR",
-      message: err?.message || String(err)
+      message: err?.stack || err?.message || String(err)
     }, "*");
   } catch(e) {}
 }`,
