@@ -1,34 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-export default function PromptInput({ onSubmit }: any) {
-  const [prompt, setPrompt] = useState("");
+interface PromptInputProps {
+  onSubmit: (prompt: string) => void;
+  isPartial?: boolean;
+  remainingCount?: number;
+  onResume?: () => void;
+  onReset?: () => void;
+  disabled?: boolean;
+  initialPrompt?: string;
+}
+
+export default function PromptInput({
+  onSubmit,
+  isPartial = false,
+  remainingCount = 0,
+  onResume,
+  onReset,
+  disabled = false,
+  initialPrompt = "",
+}: PromptInputProps) {
+  const [prompt, setPrompt] = useState(initialPrompt);
+
+  useEffect(() => {
+    if (initialPrompt && !prompt) {
+      setPrompt(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="relative">
         <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-primary-500 z-10 pointer-events-none"></div>
         <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-primary-500 z-10 pointer-events-none"></div>
         <textarea
-          className="w-full h-32 p-4 bg-[#0a0f16] border border-secondary-800 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 rounded-none placeholder:text-secondary-600 resize-none transition-colors"
+          className="w-full h-32 p-4 bg-[#0a0f16] border border-secondary-800 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 rounded-none placeholder:text-secondary-600 resize-none transition-colors disabled:opacity-50"
           placeholder="> initialize generation parameters (e.g. create a modern saas landing page)..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          disabled={disabled}
         />
       </div>
 
-      <button
-        suppressHydrationWarning
-        className="w-full flex items-center justify-center gap-3 px-6 py-4 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none border border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        onClick={() => {
-          if (prompt.trim()) onSubmit(prompt);
-        }}
-        disabled={!prompt.trim()}
-      >
-        <span className="w-1.5 h-1.5 bg-secondary-900 block"></span>
-        Execute Generation _
-      </button>
+      {isPartial && onResume ? (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-2 px-5 py-3.5 font-mono text-[10px] uppercase tracking-widest font-bold bg-amber-500 text-secondary-950 hover:bg-amber-400 transition-colors rounded-none border border-amber-500 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+            onClick={onResume}
+            disabled={disabled}
+          >
+            <span className="w-1.5 h-1.5 bg-secondary-950 block animate-pulse"></span>
+            <span>Resume Generation ({remainingCount > 0 ? `${remainingCount} remaining` : "Continue"}) ↗</span>
+          </button>
+
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 font-mono text-[9px] uppercase tracking-wider text-secondary-400 hover:text-white border border-secondary-800 bg-secondary-900/60 hover:bg-secondary-800 transition-colors cursor-pointer"
+            onClick={onReset}
+            disabled={disabled}
+          >
+            <span>Start Fresh / New Project ↻</span>
+          </button>
+        </div>
+      ) : (
+        <button
+          suppressHydrationWarning
+          className="w-full flex items-center justify-center gap-3 px-6 py-4 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none border border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          onClick={() => {
+            if (prompt.trim()) onSubmit(prompt);
+          }}
+          disabled={!prompt.trim() || disabled}
+        >
+          <span className="w-1.5 h-1.5 bg-secondary-900 block"></span>
+          Execute Generation _
+        </button>
+      )}
     </div>
   );
 }

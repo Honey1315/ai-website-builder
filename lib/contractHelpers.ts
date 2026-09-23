@@ -260,3 +260,16 @@ ${namedExportsCode ? "\n" + namedExportsCode : ""}
 
   return result;
 }
+
+/**
+ * Determines whether a file is an ungenerated placeholder or contains real code.
+ */
+export function isPlaceholderFile(file?: { name: string; content?: string } | null): boolean {
+  if (!file || !file.content || !file.content.trim()) return true;
+  const content = file.content.trim();
+  if (content.includes("Waiting for ") && content.includes("...")) return true;
+  if (content.includes("Generating ") && content.includes("...</div>")) return true;
+  if (content.includes("Auto-generated fallback container for unresolved import")) return true;
+  if (content === "{}" || content === "<div></div>" || content === "export default {};") return true;
+  return false;
+}

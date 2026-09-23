@@ -20,6 +20,7 @@ import { DEFAULT_MODEL_PROVIDER, MODEL_CATALOG } from "@/utils/constants";
 import Link from "next/link";
 import { signInWithGoogle } from "@/lib/auth-client";
 import { downloadProjectZip } from "@/lib/zipExporter";
+import { isPlaceholderFile } from "@/lib/contractHelpers";
 
 type RefineApiResponse = {
   code?: string;
@@ -85,6 +86,9 @@ function BuilderPageInner() {
   const [provider, setProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER);
   const [model, setModel] = useState<string>(MODEL_CATALOG[DEFAULT_MODEL_PROVIDER].defaultModel);
 
+  const [isPartialGeneration, setIsPartialGeneration] = useState(false);
+  const [remainingFiles, setRemainingFiles] = useState<string[]>([]);
+
   const [user, setUser] = useState<User | null>(null);
   const [draftNotification, setDraftNotification] = useState<string>("");
   type MobileView = "chat" | "preview" | "code";
@@ -96,6 +100,36 @@ function BuilderPageInner() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const saveDraftToStorage = useCallback(
+    (
+      draftFiles: FileData[],
+      draftCode: string,
+      promptText: string,
+      draftManifest?: ProjectManifest | null,
+      messages?: ChatMessage[]
+    ) => {
+      if (typeof window === "undefined" || draftFiles.length === 0) return;
+      try {
+        localStorage.setItem(
+          "ai_builder_draft",
+          JSON.stringify({
+            files: draftFiles,
+            originalPrompt: promptText,
+            code: draftCode,
+            manifest: draftManifest,
+            messages: messages || chatMessages,
+            provider,
+            model,
+            timestamp: Date.now(),
+          })
+        );
+      } catch (e) {
+        console.error("Failed to auto-save draft:", e);
+      }
+    },
+    [chatMessages, provider, model]
+  );
+
   const handleCancel = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -105,7 +139,10 @@ function BuilderPageInner() {
     setRefining(false);
     setGenerationStatus("");
     setRefineStatus("");
-  }, []);
+    if (files.length > 0) {
+      setIsPartialGeneration(true);
+    }
+  }, [files.length]);
 
   useEffect(() => {
     return () => {
@@ -218,13 +255,21 @@ function BuilderPageInner() {
           setFiles(parsed.files);
           setCode(parsed.code || "");
           setOriginalPrompt(parsed.originalPrompt || "");
+          if (parsed.manifest) setManifest(parsed.manifest);
           if (parsed.messages && parsed.messages.length > 0) {
             setChatMessages(parsed.messages);
           }
           if (parsed.provider) setProvider(parsed.provider);
           if (parsed.model) setModel(parsed.model);
-          setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
-          localStorage.removeItem("ai_builder_draft");
+
+          const placeholders = parsed.files.filter(isPlaceholderFile);
+          if (placeholders.length > 0) {
+            setIsPartialGeneration(true);
+            setRemainingFiles(placeholders.map((p: FileData) => p.name));
+            setDraftNotification("Unsaved partial project restored! You can resume generation or refine components.");
+          } else {
+            setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
+          }
           setTimeout(() => setDraftNotification(""), 7000);
         }
       } catch (e) {
@@ -312,7 +357,7 @@ function BuilderPageInner() {
     };
   }, [urlProjectId, router]);
 
-  const generateCode = async (prompt: string) => {
+  const generateCode = async (prompt: string, isResume = false) => {
     // Abort any existing running request
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -321,24 +366,47 @@ function BuilderPageInner() {
     setLoading(true);
     setError("");
     setSandpackError(null);
-    setGenerationStatus("Determining project structure...");
-    setCode("");
-    setFiles([]);
-    setManifest(null);
-    setProjectStructure([]);
-    setOriginalPrompt(prompt);
+
+    if (isResume) {
+      setGenerationStatus(`Resuming generation with ${provider} (${model})...`);
+    } else {
+      setGenerationStatus("Determining project structure...");
+      setCode("");
+      setFiles([]);
+      setManifest(null);
+      setProjectStructure([]);
+      setOriginalPrompt(prompt);
+      setIsPartialGeneration(false);
+      setRemainingFiles([]);
+    }
 
     try {
+      const payload = isResume
+        ? {
+            prompt: originalPrompt || prompt,
+            provider,
+            model,
+            resume: true,
+            existingFiles: files,
+            manifest,
+            structure: projectStructure,
+          }
+        : { prompt, provider, model };
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ prompt, provider, model }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
 
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => null);
         setError(data?.error || "Failed to generate code");
+        if (files.length > 0) {
+          setIsPartialGeneration(true);
+          saveDraftToStorage(files, code, originalPrompt || prompt, manifest);
+        }
         return;
       }
 
@@ -354,7 +422,6 @@ function BuilderPageInner() {
         }
         if (event.type === "manifest") {
           setManifest(event.manifest);
-          console.log("Manifest:", event.manifest);
           setGenerationStatus(
             `Manifest ready: ${event.manifest.files.length} files, ${event.manifest.components.length} components.`
           );
@@ -363,6 +430,8 @@ function BuilderPageInner() {
         if (event.type === "structure") {
           setFiles(event.files);
           setCode(
+            event.files.find((file) => file.name.endsWith("App.jsx") && !isPlaceholderFile(file))?.content ||
+            event.files.find((file) => !isPlaceholderFile(file))?.content ||
             event.files.find((file) => file.name.endsWith("App.jsx"))?.content ||
             event.files[0]?.content ||
             ""
@@ -371,34 +440,68 @@ function BuilderPageInner() {
           return;
         }
         if (event.type === "file") {
-          setFiles((currentFiles) => mergeFile(currentFiles, event.file));
+          setFiles((currentFiles) => {
+            const next = mergeFile(currentFiles, event.file);
+            saveDraftToStorage(
+              next,
+              event.file.name.endsWith("App.jsx") ? event.file.content : code,
+              originalPrompt || prompt,
+              manifest
+            );
+            return next;
+          });
           if (event.file.name.endsWith("App.jsx")) setCode(event.file.content);
           setGenerationStatus(`Generated ${event.index} of ${event.total}: ${event.file.name}`);
+          setRemainingFiles((prev) => prev.filter((name) => name !== event.file.name));
           return;
         }
         if (event.type === "fixing") {
           setGenerationStatus(`Auto-fixing ${event.files.length} file(s): ${event.files.join(", ")}`);
           return;
         }
+        if (event.type === "partial_done") {
+          setFiles(event.files);
+          if (event.code) setCode(event.code);
+          if (event.manifest) setManifest(event.manifest);
+          setIsPartialGeneration(true);
+          setRemainingFiles(event.remainingFiles);
+          setError(event.error);
+          setGenerationStatus(
+            `Generation paused: ${event.completedFiles.length} file(s) preserved. ${event.remainingFiles.length} remaining.`
+          );
+          const assistantMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `⚠️ Generation was paused: ${event.error}\n\nPreserved ${event.completedFiles.length} generated file(s). You can switch models in the header and click "Resume Generation", or refine existing files.`,
+            timestamp: Date.now(),
+          };
+          setChatMessages([assistantMsg]);
+          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [assistantMsg]);
+          return;
+        }
         if (event.type === "done") {
           setFiles(event.files);
-          console.log("Final files:", event.files);
           setCode(event.code);
           setManifest(event.manifest);
-          // console.log("Manifest:", event.manifest);
+          setIsPartialGeneration(false);
+          setRemainingFiles([]);
           setGenerationStatus(`Generated ${event.files.length} files.`);
-          setChatMessages([
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: `Project generated with ${event.files.length} files. Enter refinement instructions below to customize components or add features.`,
-              timestamp: Date.now(),
-            },
-          ]);
+          const assistantMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Project generated with ${event.files.length} files. Enter refinement instructions below to customize components or add features.`,
+            timestamp: Date.now(),
+          };
+          setChatMessages([assistantMsg]);
+          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [assistantMsg]);
           return;
         }
         if (event.type === "error") {
           setError(event.error);
+          if (files.length > 0) {
+            setIsPartialGeneration(true);
+            saveDraftToStorage(files, code, originalPrompt || prompt, manifest);
+          }
         }
       };
 
@@ -417,10 +520,17 @@ function BuilderPageInner() {
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") {
         setGenerationStatus("Generation stopped by user.");
+        if (files.length > 0) {
+          setIsPartialGeneration(true);
+          saveDraftToStorage(files, code, originalPrompt || prompt, manifest);
+        }
         return;
       }
       setError(err instanceof Error ? err.message : "Unknown error");
-      setCode("");
+      if (files.length > 0) {
+        setIsPartialGeneration(true);
+        saveDraftToStorage(files, code, originalPrompt || prompt, manifest);
+      }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
@@ -1014,7 +1124,23 @@ function BuilderPageInner() {
               <span className="w-1.5 h-1.5 bg-secondary-600 block"></span>
               Input Parameters
             </h2>
-            <PromptInput onSubmit={generateCode} />
+            <PromptInput
+              onSubmit={generateCode}
+              isPartial={isPartialGeneration}
+              remainingCount={remainingFiles.length}
+              onResume={() => generateCode(originalPrompt, true)}
+              onReset={() => {
+                setIsPartialGeneration(false);
+                setRemainingFiles([]);
+                setFiles([]);
+                setCode("");
+                setManifest(null);
+                setOriginalPrompt("");
+                localStorage.removeItem("ai_builder_draft");
+              }}
+              disabled={loading}
+              initialPrompt={originalPrompt}
+            />
           </div>
 
           {/* CHAT */}
@@ -1030,6 +1156,8 @@ function BuilderPageInner() {
               isAuthenticated={!!user}
               messages={chatMessages}
               isLoading={refining}
+              isGenerating={loading}
+              hasFiles={files.length > 0}
               statusMessage={refineStatus}
             />
           </div>
@@ -1038,6 +1166,52 @@ function BuilderPageInner() {
         {/* Right Workspace (Main Content) */}
         <div className={`flex-1 p-3 sm:p-6 overflow-y-auto flex flex-col gap-4 sm:gap-6 bg-[#0a0f16] relative ${mobileView !== "chat" ? "flex" : "hidden lg:flex"
           }`}>
+
+          {isPartialGeneration && !loading && files.length > 0 && (
+            <div className="border border-amber-500/40 bg-amber-500/10 p-4 font-mono text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 bg-amber-400 block shrink-0 animate-pulse"></span>
+                <div>
+                  <div className="text-amber-400 font-bold uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <span>PARTIAL_PROJECT_PRESERVED</span>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {files.filter((f) => !isPlaceholderFile(f)).length} / {files.length} FILES READY
+                    </span>
+                  </div>
+                  <div className="text-secondary-300 text-[10px] mt-1 leading-relaxed">
+                    {remainingFiles.length > 0
+                      ? `Remaining: ${remainingFiles.join(", ")}. Select a model in the header and click Resume Generation.`
+                      : "Files preserved successfully. You can continue refining or modify code below."}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => generateCode(originalPrompt, true)}
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 text-secondary-950 hover:bg-amber-400 font-bold uppercase tracking-wider text-[10px] transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+                >
+                  <span>Resume Generation</span>
+                  <span>↗</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPartialGeneration(false);
+                    setRemainingFiles([]);
+                    setFiles([]);
+                    setCode("");
+                    setManifest(null);
+                    setOriginalPrompt("");
+                    localStorage.removeItem("ai_builder_draft");
+                  }}
+                  className="px-3 py-2 border border-secondary-700 bg-secondary-900/60 hover:bg-secondary-800 text-secondary-400 hover:text-white uppercase tracking-wider text-[10px] transition-colors cursor-pointer"
+                >
+                  Discard & Reset
+                </button>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="border border-danger-500/50 bg-danger-500/10 text-danger-500 p-4 font-mono text-xs tracking-widest uppercase flex gap-4 items-start shrink-0">

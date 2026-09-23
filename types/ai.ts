@@ -80,6 +80,15 @@ export type GenerateStreamEvent =
       metadata: FileMetadata[];
       mismatches: ValidationMismatch[];
     }
+  | {
+      type: "partial_done";
+      code: string;
+      files: FileData[];
+      manifest: ProjectManifest;
+      completedFiles: string[];
+      remainingFiles: string[];
+      error: string;
+    }
   | { type: "error"; error: string };
 
 export type RefineStreamEvent =

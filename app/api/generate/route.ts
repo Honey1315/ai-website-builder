@@ -10,32 +10,23 @@ import { getAuthUserId } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { localFileSummary } from "@/lib/extractFileSummary";
 
-import type { ProviderOptions } from "@/types/ai";
+import type { ProviderOptions, FileData, GenerateStreamEvent } from "@/types/ai";
+export type { GenerateStreamEvent };
 
 import {
-
   isCodegenFile,
-
   orderedManifestFiles,
-
   ensureMissingImportsExist,
-
+  isPlaceholderFile,
 } from "@/lib/contractHelpers";
 
 import { getAffectedFiles } from "@/lib/contractValidation";
 
-import type { FileData } from "@/types/ai";
-
 import type {
-
   FileMetadata,
-
   FileSummary,
-
   ProjectManifest,
-
   ValidationMismatch,
-
 } from "@/types/contract";
 
 // Inter-request pace delay — prevents bursting free-tier RPM limits when generating multi-file projects
@@ -44,26 +35,6 @@ const GENERATION_PACE_MS = 550;
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-
-
-export type GenerateStreamEvent =
-
-  | { type: "structure_paths"; paths: string[] }
-
-  | { type: "manifest"; manifest: ProjectManifest }
-
-  | { type: "structure"; files: FileData[] }
-
-  | { type: "file"; file: FileData; index: number; total: number }
-
-  | { type: "validation"; metadata: FileMetadata[]; mismatches: ValidationMismatch[] }
-
-  | { type: "fixing"; files: string[]; mismatches: ValidationMismatch[] }
-
-  | { type: "done"; code: string; files: FileData[]; manifest: ProjectManifest; metadata: FileMetadata[]; mismatches: ValidationMismatch[] }
-
-  | { type: "error"; error: string };
 
 
 
@@ -162,261 +133,218 @@ function createPlaceholderFile(fileName: string): FileData {
 }
 
 
+interface ResumeContext {
+  resume?: boolean;
+  existingFiles?: FileData[];
+  manifest?: ProjectManifest;
+  structure?: string[];
+}
 
 async function runContractFirstStream(
-
   prompt: string,
-
   controller: ReadableStreamDefaultController<Uint8Array>,
-
-  options: ProviderOptions = {}
-
+  options: ProviderOptions = {},
+  resumeContext?: ResumeContext
 ) {
-
-  const structure = await AIService.generateStructure(prompt, options);
-
-  controller.enqueue(streamEvent({ type: "structure_paths", paths: structure }));
-
-  // console.log("Generated structure:", structure); // Log the generated structure for debugging
-
-  const manifest = await AIService.generateManifest(prompt, structure, options);
-
-  controller.enqueue(streamEvent({ type: "manifest", manifest }));
-
-
-
-  const fileNames = orderedManifestFiles(manifest).filter(isCodegenFile);
-  console.log("fileNames", fileNames);
-
-  const placeholderFiles = fileNames.map(createPlaceholderFile);
-
-  const generatedFiles: FileData[] = [...placeholderFiles];
-
+  let structure: string[];
+  let manifest: ProjectManifest;
+  let fileNames: string[];
+  let generatedFiles: FileData[];
   const summaries = new Map<string, FileSummary>();
+  let filesToGenerate: string[];
 
-  // console.log("manifest :", manifest); // Log the manifest for debugging
+  if (
+    resumeContext?.resume &&
+    resumeContext.manifest &&
+    resumeContext.existingFiles &&
+    resumeContext.existingFiles.length > 0
+  ) {
+    manifest = resumeContext.manifest;
+    structure = resumeContext.structure || manifest.files;
+    controller.enqueue(streamEvent({ type: "manifest", manifest }));
 
+    fileNames = orderedManifestFiles(manifest).filter(isCodegenFile);
+    generatedFiles = [...resumeContext.existingFiles];
 
-  controller.enqueue(streamEvent({ type: "structure", files: placeholderFiles }));
-
-
-
-  let index = 0;
-
-
-  // console.log("Starting file generation for files:", fileNames); // Log the list of files to be generated
-
-  for (const fileName of fileNames) {
-
-    const file = await AIService.generateProjectFile(
-
-      prompt,
-
-      structure,
-
-      manifest,
-
-      fileName,
-
-      summaries,
-
-      [],
-
-      options,
-
-      generatedFiles
-
-    );
-
-    const fileIndex = generatedFiles.findIndex((entry) => entry.name === fileName);
-
-
-
-    if (fileIndex >= 0) {
-
-      generatedFiles[fileIndex] = file;
-
-    } else {
-
-      generatedFiles.push(file);
-
+    // Populate summaries from non-placeholder files that are already completed
+    for (const f of resumeContext.existingFiles) {
+      if (!isPlaceholderFile(f)) {
+        summaries.set(f.name, localFileSummary(f.name, f.content));
+      }
     }
 
-    // Local regex extraction — no LLM call. Updates summaries so the NEXT file
-    // in the loop receives real exported signatures (code is the ground truth).
-    summaries.set(fileName, localFileSummary(fileName, file.content));
+    // Only generate files that do not yet have completed summaries
+    filesToGenerate = fileNames.filter((name) => !summaries.has(name));
+    controller.enqueue(streamEvent({ type: "structure", files: generatedFiles }));
+  } else {
+    structure = await AIService.generateStructure(prompt, options);
+    controller.enqueue(streamEvent({ type: "structure_paths", paths: structure }));
 
-    index += 1;
+    manifest = await AIService.generateManifest(prompt, structure, options);
+    controller.enqueue(streamEvent({ type: "manifest", manifest }));
 
-    controller.enqueue(
-
-      streamEvent({
-
-        type: "file",
-
-        file,
-
-        index,
-
-        total: fileNames.length,
-
-      })
-
-    );
-
-    // console.log("Generated file:", fileName); // Log each generated file
-
-    // Pace requests to avoid tripping OpenRouter / NVIDIA free-tier RPM limits
-    if (index < fileNames.length) await sleep(GENERATION_PACE_MS);
-
+    fileNames = orderedManifestFiles(manifest).filter(isCodegenFile);
+    const placeholderFiles = fileNames.map(createPlaceholderFile);
+    generatedFiles = [...placeholderFiles];
+    controller.enqueue(streamEvent({ type: "structure", files: placeholderFiles }));
+    filesToGenerate = [...fileNames];
   }
 
+  let stoppedEarly = false;
+  let stopReason = "";
 
+  for (let i = 0; i < filesToGenerate.length; i++) {
+    const fileName = filesToGenerate[i];
+    try {
+      const file = await AIService.generateProjectFile(
+        prompt,
+        structure,
+        manifest,
+        fileName,
+        summaries,
+        [],
+        options,
+        generatedFiles
+      );
 
+      const fileIndex = generatedFiles.findIndex((entry) => entry.name === fileName);
+      if (fileIndex >= 0) {
+        generatedFiles[fileIndex] = file;
+      } else {
+        generatedFiles.push(file);
+      }
+
+      summaries.set(fileName, localFileSummary(fileName, file.content));
+
+      controller.enqueue(
+        streamEvent({
+          type: "file",
+          file,
+          index: summaries.size,
+          total: fileNames.length,
+        })
+      );
+
+      if (i < filesToGenerate.length - 1) await sleep(GENERATION_PACE_MS);
+    } catch (err: unknown) {
+      console.error(`[Generation] Failed or model exhausted on ${fileName}:`, err);
+      stoppedEarly = true;
+      stopReason = err instanceof Error ? err.message : String(err);
+      break;
+    }
+  }
+
+  if (stoppedEarly) {
+    if (summaries.size > 0) {
+      const safeFiles = ensureMissingImportsExist(generatedFiles);
+      const appFile =
+        safeFiles.find((f) => f.name.endsWith("App.jsx") && !isPlaceholderFile(f)) ||
+        safeFiles.find((f) => !isPlaceholderFile(f));
+
+      const completed = Array.from(summaries.keys());
+      const remaining = fileNames.filter((f) => !summaries.has(f));
+
+      controller.enqueue(
+        streamEvent({
+          type: "partial_done",
+          code: appFile?.content || "",
+          files: safeFiles,
+          manifest,
+          completedFiles: completed,
+          remainingFiles: remaining,
+          error: stopReason || "Generation interrupted",
+        })
+      );
+      return;
+    } else {
+      controller.enqueue(
+        streamEvent({
+          type: "error",
+          error: stopReason || "Failed to generate initial project files",
+        })
+      );
+      return;
+    }
+  }
+
+  // If completed all files, run validation & auto-fix
   let validation = AIService.validateGeneratedFiles(manifest, generatedFiles);
-
   controller.enqueue(
-
     streamEvent({
-
       type: "validation",
-
       metadata: validation.metadata,
-
       mismatches: validation.mismatches,
-
     })
-
   );
-
-
 
   let finalFiles = generatedFiles;
 
-
-
   if (validation.mismatches.length > 0) {
-
     const affected = getAffectedFiles(validation.mismatches);
-
     controller.enqueue(
-
       streamEvent({
-
         type: "fixing",
-
         files: affected,
-
         mismatches: validation.mismatches,
-
       })
-
     );
 
-
-
-    finalFiles = await AIService.autoFixFiles(
-
-      prompt,
-
-      structure,
-
-      manifest,
-
-      generatedFiles,
-
-      validation.mismatches,
-
-      summaries,
-
-      options
-
-    );
-
-
-
-    for (const [fileIndex, fileName] of affected.entries()) {
-
-      const file = finalFiles.find((entry) => entry.name === fileName);
-
-      if (!file) continue;
-
-
-
-      controller.enqueue(
-
-        streamEvent({
-
-          type: "file",
-
-          file,
-
-          index: fileIndex + 1,
-
-          total: affected.length,
-
-        })
-
+    try {
+      finalFiles = await AIService.autoFixFiles(
+        prompt,
+        structure,
+        manifest,
+        generatedFiles,
+        validation.mismatches,
+        summaries,
+        options
       );
 
+      for (const [fileIndex, fileName] of affected.entries()) {
+        const file = finalFiles.find((entry) => entry.name === fileName);
+        if (!file) continue;
+
+        controller.enqueue(
+          streamEvent({
+            type: "file",
+            file,
+            index: fileIndex + 1,
+            total: affected.length,
+          })
+        );
+      }
+
+      validation = AIService.validateGeneratedFiles(manifest, finalFiles);
+      controller.enqueue(
+        streamEvent({
+          type: "validation",
+          metadata: validation.metadata,
+          mismatches: validation.mismatches,
+        })
+      );
+    } catch (fixErr) {
+      console.warn("[Generation] Auto-fix failed, falling back to generated files:", fixErr);
+      finalFiles = generatedFiles;
     }
-
-
-
-    validation = AIService.validateGeneratedFiles(manifest, finalFiles);
-
-    controller.enqueue(
-
-      streamEvent({
-
-        type: "validation",
-
-        metadata: validation.metadata,
-
-        mismatches: validation.mismatches,
-
-      })
-
-    );
-
   }
 
-
-
   finalFiles = ensureMissingImportsExist(finalFiles);
-
   const appFile =
-
     finalFiles.find((file) => file.name.endsWith("App.jsx")) || finalFiles[0];
 
-
-
   controller.enqueue(
-
     streamEvent({
-
       type: "done",
-
       code: appFile?.content || "",
-
       files: finalFiles,
-
       manifest,
-
       metadata: validation.metadata,
-
       mismatches: validation.mismatches,
-
     })
-
   );
-
 }
 
-
-
 export async function POST(request: NextRequest) {
-
   try {
     const userId = await getAuthUserId(request);
 
@@ -439,21 +367,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt } = body as { prompt?: string };
+    const {
+      prompt,
+      resume,
+      existingFiles,
+      manifest: bodyManifest,
+      structure: bodyStructure,
+    } = body as {
+      prompt?: string;
+      resume?: boolean;
+      existingFiles?: FileData[];
+      manifest?: ProjectManifest;
+      structure?: string[];
+    };
 
-    if (!prompt) {
-
+    if (!prompt && (!resume || !existingFiles || existingFiles.length === 0)) {
       return NextResponse.json(
-
         { error: "Prompt is required" },
-
         { status: 400 }
-
       );
-
     }
 
-    if (prompt.length > 4000) {
+    if (prompt && prompt.length > 4000) {
       return NextResponse.json(
         { error: "Prompt exceeds maximum length of 4000 characters" },
         { status: 400 }
@@ -463,54 +398,40 @@ export async function POST(request: NextRequest) {
     const options = resolveProviderOptions(body);
 
     if (request.headers.get("accept")?.includes("text/event-stream")) {
-
       const stream = new ReadableStream({
-
         async start(controller) {
-
           try {
-
-            await runContractFirstStream(prompt, controller, options);
-
+            await runContractFirstStream(prompt || "", controller, options, {
+              resume,
+              existingFiles,
+              manifest: bodyManifest,
+              structure: bodyStructure,
+            });
           } catch (error) {
-
             const errorMessage =
-
               error instanceof Error ? error.message : "Failed to generate code";
-
-
-
             controller.enqueue(streamEvent({ type: "error", error: errorMessage }));
-
           } finally {
-
             controller.close();
-
           }
-
         },
-
       });
-
-
 
       return new Response(stream, {
-
         headers: {
-
           "Content-Type": "text/event-stream; charset=utf-8",
-
           "Cache-Control": "no-cache, no-transform",
-
           Connection: "keep-alive",
-
         },
-
       });
-
     }
 
-
+    if (!prompt) {
+      return NextResponse.json(
+        { error: "Prompt is required" },
+        { status: 400 }
+      );
+    }
 
     const result = await AIService.generateCode(prompt, options);
 

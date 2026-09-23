@@ -11,6 +11,8 @@ interface ChatPanelProps {
   isAuthenticated?: boolean;
   messages?: ChatMessage[];
   isLoading?: boolean;
+  isGenerating?: boolean;
+  hasFiles?: boolean;
   statusMessage?: string;
 }
 
@@ -21,6 +23,8 @@ export default function ChatPanel({
   isAuthenticated = false,
   messages = [],
   isLoading = false,
+  isGenerating = false,
+  hasFiles = true,
   statusMessage,
 }: ChatPanelProps) {
   const [message, setMessage] = useState("");
@@ -33,7 +37,7 @@ export default function ChatPanel({
   }, [messages, isLoading]);
 
   const handleSend = () => {
-    if (!message.trim() || isLoading) return;
+    if (!message.trim() || isLoading || isGenerating || !hasFiles) return;
     onSend(message.trim());
     setMessage("");
   };
@@ -157,12 +161,18 @@ export default function ChatPanel({
             <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-primary-500 z-10 pointer-events-none"></div>
             <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-primary-500 z-10 pointer-events-none"></div>
             <textarea
-              className="w-full h-24 p-3 bg-[#0a0f16] border border-secondary-800 text-secondary-300 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 rounded-none placeholder:text-secondary-600 resize-none transition-colors"
-              placeholder="> input refinement parameters (e.g. 'make it darker', 'add reset next to pause')..."
+              className="w-full h-24 p-3 bg-[#0a0f16] border border-secondary-800 text-secondary-300 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 rounded-none placeholder:text-secondary-600 resize-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder={
+                isGenerating
+                  ? "> Project generation in progress... refinement disabled."
+                  : !hasFiles
+                  ? "> Generate a project first to enable refinement parameters..."
+                  : "> input refinement parameters (e.g. 'make it darker', 'add reset next to pause')..."
+              }
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={isLoading}
+              disabled={isLoading || isGenerating || !hasFiles}
             />
           </div>
 
@@ -178,6 +188,24 @@ export default function ChatPanel({
             >
               <span className="w-2 h-2 bg-danger-400 block animate-pulse"></span>
               <span>■ Stop Refinement</span>
+            </button>
+          ) : isGenerating ? (
+            <button
+              type="button"
+              disabled
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-secondary-800/80 text-secondary-500 border border-secondary-700/60 cursor-not-allowed shrink-0 select-none opacity-70"
+            >
+              <div className="w-2.5 h-2.5 border border-secondary-400 border-t-transparent animate-spin"></div>
+              <span>Generating Project Files...</span>
+            </button>
+          ) : !hasFiles ? (
+            <button
+              type="button"
+              disabled
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-secondary-800/40 text-secondary-600 border border-secondary-800/60 cursor-not-allowed shrink-0 select-none opacity-60"
+            >
+              <span className="w-1.5 h-1.5 bg-secondary-600 block"></span>
+              <span>Generate Project First</span>
             </button>
           ) : (
             <button
