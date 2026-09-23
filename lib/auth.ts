@@ -3,30 +3,38 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 
 export async function getUser() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Can be ignored if called from a Server Component and middleware is in place
+            }
+          },
         },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Can be ignored if called from a Server Component and middleware is in place
-          }
-        },
-      },
-    }
-  );
+      }
+    );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      return null;
+    }
+    return data?.user ?? null;
+  } catch (err: any) {
+    console.warn("[auth] Warning: Failed to connect to Supabase Auth (network/timeout):", err?.message || err);
+    return null;
+  }
 }
 
 export async function requireUser() {
