@@ -28,9 +28,17 @@ export interface GenerateResponse {
   mismatches?: ValidationMismatch[];
 }
 
+export interface ChatMessage {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: number;
+}
+
 export interface RefineRequest {
   code: string;
   message: string;
+  messages?: ChatMessage[];
   files?: FileData[];
   provider?: ModelProvider;
   model?: string;
@@ -39,6 +47,7 @@ export interface RefineRequest {
 export interface RefineResponse {
   code: string;
   files?: FileData[];
+  summary?: string;
   error?: string;
 }
 

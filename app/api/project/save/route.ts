@@ -100,6 +100,22 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        // Sync messages if provided
+        if (projectData.messages && projectData.messages.length > 0) {
+          await tx.messages.deleteMany({
+            where: { project_id: project.id },
+          });
+
+          await tx.messages.createMany({
+            data: projectData.messages.map((msg) => ({
+              project_id: project.id,
+              role: msg.role,
+              content: msg.content,
+              created_at: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+            })),
+          });
+        }
+
         return project;
       },
       {
@@ -108,11 +124,12 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Fetch the project with its files to return
+    // Fetch the project with its files and messages to return
     const projectWithFiles = await prisma.projects.findUnique({
       where: { id: result.id },
       include: {
         project_files: true,
+        messages: { orderBy: { created_at: "asc" } },
       },
     });
 
@@ -132,6 +149,12 @@ export async function POST(request: NextRequest) {
         name: file.path,
         content: file.content,
         language: file.language ?? undefined,
+      })),
+      messages: ((projectWithFiles as any).messages || []).map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime(),
       })),
       createdAt: projectWithFiles.created_at,
       updatedAt: projectWithFiles.updated_at,
@@ -232,6 +255,7 @@ export async function GET(request: NextRequest) {
         where: { id: projectId },
         include: {
           project_files: true,
+          messages: { orderBy: { created_at: "asc" } },
         },
       });
 
@@ -260,6 +284,12 @@ export async function GET(request: NextRequest) {
           name: file.path,
           content: file.content,
           language: file.language ?? undefined,
+        })),
+        messages: ((project as any).messages || []).map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.created_at).getTime(),
         })),
         createdAt: project.created_at,
         updatedAt: project.updated_at,

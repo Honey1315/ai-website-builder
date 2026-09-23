@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import type { FileData, GenerateStreamEvent } from "@/types/ai";
+import type { ChatMessage, FileData, GenerateStreamEvent } from "@/types/ai";
 import PromptInput from "./components/PromptInput";
 import PreviewPanel from "./components/PreviewPanel";
 import CodeEditor from "./components/CodeEditor";
@@ -24,6 +24,7 @@ import { downloadProjectZip } from "@/lib/zipExporter";
 type RefineApiResponse = {
   code?: string;
   files?: FileData[];
+  summary?: string;
   error?: string;
 };
 
@@ -59,6 +60,7 @@ function BuilderPageInner() {
   const [refining, setRefining] = useState(false);
   const [error, setError] = useState("");
   const [sandpackError, setSandpackError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [generationStatus, setGenerationStatus] = useState("");
   const [files, setFiles] = useState<FileData[]>([]);
   const [manifest, setManifest] = useState<ProjectManifest | null>(null);
@@ -187,6 +189,9 @@ function BuilderPageInner() {
           setFiles(parsed.files);
           setCode(parsed.code || "");
           setOriginalPrompt(parsed.originalPrompt || "");
+          if (parsed.messages && parsed.messages.length > 0) {
+            setChatMessages(parsed.messages);
+          }
           if (parsed.provider) setProvider(parsed.provider);
           if (parsed.model) setModel(parsed.model);
           setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
@@ -223,6 +228,18 @@ function BuilderPageInner() {
         setFiles(project.files || []);
         const appFile = project.files?.find((f) => f.name.endsWith("App.jsx"));
         setCode(appFile?.content || project.files?.[0]?.content || "");
+        if (project.messages && project.messages.length > 0) {
+          setChatMessages(project.messages);
+        } else {
+          setChatMessages([
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: `Project "${project.name || "Untitled"}" loaded. You can submit refinement directives below to modify components.`,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
 
         // Restore dependencies from saved package.json so Sandpack and sidebar preserve them
         const pkgFile = project.files?.find((f) => f.name === "package.json" || f.name === "/package.json");
@@ -335,6 +352,14 @@ function BuilderPageInner() {
           setManifest(event.manifest);
           // console.log("Manifest:", event.manifest);
           setGenerationStatus(`Generated ${event.files.length} files.`);
+          setChatMessages([
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: `Project generated with ${event.files.length} files. Enter refinement instructions below to customize components or add features.`,
+              timestamp: Date.now(),
+            },
+          ]);
           return;
         }
         if (event.type === "error") {
@@ -367,12 +392,23 @@ function BuilderPageInner() {
     setSandpackError(null);
     setRefining(true);
 
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: message,
+      timestamp: Date.now(),
+    };
+    const outgoingMessages = [...chatMessages, userMessage];
+    setChatMessages(outgoingMessages);
+
     try {
       const res = await fetch("/api/refine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
+          messages: outgoingMessages,
+          projectId: projectId || undefined,
           code,
           prompt: originalPrompt,
           structure: projectStructure.length > 0 ? projectStructure : files.map((f) => f.name),
@@ -385,7 +421,17 @@ function BuilderPageInner() {
 
       const data = (await res.json()) as RefineApiResponse;
       if (!res.ok || data.error) {
-        setError(data.error || "Failed to refine code");
+        const errorMsg = data.error || "Failed to refine code";
+        setError(errorMsg);
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `[ERR] ${errorMsg}`,
+            timestamp: Date.now(),
+          },
+        ]);
         return;
       }
 
@@ -413,8 +459,28 @@ function BuilderPageInner() {
           return updated;
         });
       }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.summary || "Applied modifications successfully.",
+          timestamp: Date.now(),
+        },
+      ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMsg);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `[ERR] ${errorMsg}`,
+          timestamp: Date.now(),
+        },
+      ]);
     } finally {
       setRefining(false);
     }
@@ -436,6 +502,7 @@ function BuilderPageInner() {
               files,
               originalPrompt,
               code,
+              messages: chatMessages,
               provider,
               model,
               timestamp: Date.now(),
@@ -508,6 +575,7 @@ function BuilderPageInner() {
         prompt: originalPrompt || undefined,
         code: "",
         files: allFiles,
+        messages: chatMessages,
         createdAt: new Date(),
         updatedAt: new Date(),
         userId: currentUser.id,
@@ -848,7 +916,13 @@ function BuilderPageInner() {
               <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
               System Logs / Refine
             </h3>
-            <ChatPanel onSend={refineCode} error={sandpackError} isAuthenticated={!!user} />
+            <ChatPanel
+              onSend={refineCode}
+              error={sandpackError}
+              isAuthenticated={!!user}
+              messages={chatMessages}
+              isLoading={refining}
+            />
           </div>
         </div>
 

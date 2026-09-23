@@ -1,4 +1,4 @@
-import type { FileData } from "@/types/ai";
+import type { ChatMessage, FileData } from "@/types/ai";
 
 export interface Project {
   id: string;
@@ -7,6 +7,7 @@ export interface Project {
   prompt?: string;
   code: string;
   files: FileData[];
+  messages?: ChatMessage[];
   createdAt: Date;
   updatedAt: Date;
   userId?: string;

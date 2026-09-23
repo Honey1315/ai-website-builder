@@ -424,6 +424,7 @@ Target File to Modify:
 Context Files (delimited with === FILE: ===):
 {files}
 
+{history}
 USER REFINEMENT REQUEST:
 "{message}"
 
@@ -489,6 +490,7 @@ Manifest:
 Existing Project Files (paths only):
 {filePaths}
 
+{history}
 Refinement Request:
 {message}
 

@@ -33,7 +33,7 @@ import {
   ensureMissingImportsExist,
 } from "@/lib/contractHelpers";
 
-import { FileData, GenerateResponse, ProviderOptions, RefineResponse } from "@/types/ai";
+import { ChatMessage, FileData, GenerateResponse, ProviderOptions, RefineResponse } from "@/types/ai";
 import { FileMetadata, FileSummary, ProjectManifest, ValidationMismatch } from "@/types/contract";
 
 const MAX_FIX_ROUNDS = 2;
@@ -70,6 +70,18 @@ export interface RefineContext {
   manifest?: ProjectManifest;
   files?: FileData[];
   code?: string;
+  messages?: ChatMessage[];
+}
+
+function formatConversationHistory(messages?: ChatMessage[]): string {
+  if (!messages || messages.length === 0) return "";
+  const recent = messages.slice(-6);
+  const formatted = recent
+    .filter((m) => m && m.content && m.content.trim())
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.trim()}`)
+    .join("\n");
+  if (!formatted) return "";
+  return `RECENT CONVERSATION HISTORY (Context for references like "it", "make it darker", "add reset next to pause"):\n${formatted}\n`;
 }
 
 export class AIService {
@@ -291,12 +303,15 @@ export class AIService {
       const structure = context.structure?.length ? context.structure : currentFiles.map((file) => file.name);
       const manifest = context.manifest || createFallbackManifest(context.prompt || message, structure);
 
+      const historyText = formatConversationHistory(context.messages);
+
       const selectedFiles = await AIService.selectRefinementFiles({
         message,
         prompt: context.prompt || "",
         structure,
         manifest,
         filePaths: currentFiles.map(f => f.name),
+        history: historyText,
         options,
       });
 
@@ -321,6 +336,7 @@ export class AIService {
             structure: formatStructureBlock(structure),
             manifest: formatManifestBlock(manifest),
             files: formatFilesBlock(relevantFiles),
+            history: historyText,
             message,
             targetFileName: targetFile.name,
           });
@@ -382,14 +398,18 @@ export class AIService {
 
       finalFiles = ensureMissingImportsExist(finalFiles);
       const appFile = finalFiles.find((file) => file.name.endsWith("App.jsx")) || finalFiles[0];
-      return { code: appFile?.content || "", files: finalFiles };
+      const modifiedFileNames = refinedFiles.map((f) => f.name.replace(/^src\//, "")).filter((v, i, a) => a.indexOf(v) === i);
+      const summary = modifiedFileNames.length > 0
+        ? `Updated ${modifiedFileNames.join(", ")}.`
+        : "Refinement completed.";
+      return { code: appFile?.content || "", files: finalFiles, summary };
     } catch (error) {
       return { code: "", error: error instanceof Error ? error.message : "Failed to refine code" };
     }
   }
 
   static async selectRefinementFiles(params: {
-    message: string; prompt: string; structure: string[]; manifest: ProjectManifest; filePaths: string[]; options: ProviderOptions;
+    message: string; prompt: string; structure: string[]; manifest: ProjectManifest; filePaths: string[]; history?: string; options: ProviderOptions;
   }): Promise<string[]> {
     try {
       const formattedPrompt = formatPrompt(SELECT_REFINEMENT_FILES_PROMPT_TEMPLATE, {
@@ -397,6 +417,7 @@ export class AIService {
         structure: formatStructureBlock(params.structure),
         manifest: formatManifestBlock(params.manifest),
         filePaths: params.filePaths.join("\n"),
+        history: params.history || "",
         message: params.message,
       });
       const result = await callFastUtilityModel([
