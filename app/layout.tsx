@@ -28,8 +28,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${jakarta.variable} ${manrope.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-secondary-50 font-sans text-secondary-800">
+      <body
+        className="min-h-full flex flex-col bg-secondary-50 font-sans text-secondary-800"
+        suppressHydrationWarning
+      >
         <Providers>{children}</Providers>
       </body>
     </html>

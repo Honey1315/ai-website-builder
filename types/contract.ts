@@ -44,6 +44,7 @@ export interface FileMetadata {
   componentProps: Record<string, string[]>;
   usages: ComponentUsage[];
   dependencies: string[];
+  localImports?: { source: string; names: string[] }[];
 }
 
 export type ValidationMismatchType =

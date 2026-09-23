@@ -95,9 +95,45 @@ function extractUsages(content: string): ComponentUsage[] {
   return usages;
 }
 
+function extractLocalImports(content: string): { source: string; names: string[] }[] {
+  const localImports: { source: string; names: string[] }[] = [];
+  const IMPORT_NAMED_RE = /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
+  const IMPORT_DEFAULT_RE = /import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]/g;
+  const IMPORT_ALL_RE = /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = IMPORT_NAMED_RE.exec(content)) !== null) {
+    const source = match[2].trim();
+    if (source.startsWith(".")) {
+      const names = match[1]
+        .split(",")
+        .map((p) => p.trim().split(/\s+as\s+/)[0].trim())
+        .filter(Boolean);
+      localImports.push({ source, names });
+    }
+  }
+
+  while ((match = IMPORT_DEFAULT_RE.exec(content)) !== null) {
+    const source = match[2].trim();
+    if (source.startsWith(".")) {
+      localImports.push({ source, names: [match[1].trim()] });
+    }
+  }
+
+  while ((match = IMPORT_ALL_RE.exec(content)) !== null) {
+    const source = match[2].trim();
+    if (source.startsWith(".")) {
+      localImports.push({ source, names: [match[1].trim()] });
+    }
+  }
+
+  return localImports;
+}
+
 export function extractFileMetadata(fileName: string, content: string): FileMetadata {
   const { exports, componentProps } = extractExports(content);
   const imports = extractImports(content);
+  const localImports = extractLocalImports(content);
   const usages = extractUsages(content);
 
   const dependencies = usages
@@ -111,6 +147,7 @@ export function extractFileMetadata(fileName: string, content: string): FileMeta
     componentProps,
     usages,
     dependencies,
+    localImports,
   };
 }
 

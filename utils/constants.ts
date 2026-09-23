@@ -2,7 +2,9 @@ import type { ModelProvider } from "@/types/ai";
 
 export const MODELS = {
   OPENROUTER_LAGUNA_FREE: "poolside/laguna-m.1:free",
-  OPENROUTER_QWEN_FREE: "qwen/qwen3-next-80b-a3b-instruct:free"
+  OPENROUTER_QWEN_FREE: "qwen/qwen3-next-80b-a3b-instruct:free",
+  OPENROUTER_LLAMA_3_3_FREE: "meta-llama/llama-3.3-70b-instruct:free",
+  OPENROUTER_QWEN_CODER_FREE: "qwen/qwen-2.5-coder-32b-instruct:free",
 };
 
 export interface ModelCatalogEntry {
@@ -12,27 +14,42 @@ export interface ModelCatalogEntry {
 }
 
 export const MODEL_CATALOG: Record<ModelProvider, ModelCatalogEntry> = {
-  nvidia: {
-    label: "NVIDIA",
+  gemini: {
+    label: "Google Gemini",
     models: [
-      "nvidia/nemotron-3-super-120b-a12b",
-      "nvidia/nemotron-3-ultra-550b-a55b",
-      "qwen/qwen3-next-80b-a3b-instruct",
-      "microsoft/phi-4-mini-instruct",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-flash-latest",
     ],
-    defaultModel: "nvidianvidia/nemotron-3-ultra-550b-a55b",
+    defaultModel: "gemini-3.6-flash",
   },
   openrouter: {
     label: "OpenRouter",
     models: [
-      "poolside/laguna-m.1:free",
-      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "inclusionai/ling-3.0-flash-vl:free",
+      "z-ai/glm-5.2:free",
+      "qwen/qwen3.8-27b:free",
+      "poolside/laguna-xs-2.1:free",
+      "poolside/laguna-s-2.1:free",
+      "thinkingmachines/inkling:free"
     ],
-    defaultModel: "poolside/laguna-m.1:free",
+    defaultModel: "inclusionai/ling-3.0-flash-vl:free",
+  },
+  nvidia: {
+    label: "NVIDIA",
+    models: [
+      "poolside/laguna-xs-2.1",
+      "nvidia/nemotron-3-super-120b-a12b",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+    ],
+    defaultModel: "poolside/laguna-xs-2.1",
   },
 };
 
-export const DEFAULT_MODEL_PROVIDER: ModelProvider = "nvidia";
+// Default provider: Gemini (primary) -> OpenRouter -> NVIDIA
+export const DEFAULT_MODEL_PROVIDER: ModelProvider = "gemini";
 
 export const API_ENDPOINTS = {
   GENERATE: "/api/generate",

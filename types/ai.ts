@@ -4,11 +4,13 @@ import type {
   ValidationMismatch,
 } from "@/types/contract";
 
-export type ModelProvider = "nvidia" | "openrouter";
+export type ModelProvider = "nvidia" | "openrouter" | "gemini";
 
 export interface ProviderOptions {
   provider?: ModelProvider;
   model?: string;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 export interface GenerateRequest {

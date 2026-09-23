@@ -91,20 +91,19 @@ Open [http://localhost:3000/builder](http://localhost:3000/builder) to access th
 
 ## Authentication Features
 
-The application includes Google OAuth authentication:
+The application includes seamless, in-place Google OAuth authentication:
 
-- **Sign In**: Authenticate with Google at `/auth/login`
-- **Profile Page**: View user information at `/profile` (protected route)
-- **Session Management**: Automatic session handling with JWT tokens
-- **Route Protection**: Examples of how to protect pages requiring authentication
+- **In-Place Sign In**: 1-click Google authentication directly from the Navbar, Projects page, or Builder workspace
+- **Session Management**: Automatic session handling and token refresh via `@supabase/ssr` cookies
+- **Cloud Synchronization**: Auto-saves unsaved drafts to Supabase when logging in
+- **Auto-Restoration**: Restores local workspace drafts seamlessly upon returning from OAuth
 
 ### How Authentication Works
 
-1. Users click "Sign up / Sign in with Google" to authenticate
-2. Google OAuth handles the authentication flow via Supabase
-3. Upon successful auth, Supabase creates an encrypted session
-4. Session is maintained via cookies and refreshed as needed
-5. Protected routes check for valid session before rendering
+1. Users click "Sign In with Google" directly from the navigation bar or action gate
+2. Client helper `signInWithGoogle()` initiates Google OAuth via Supabase with return path preservation
+3. `/app/auth/callback/route.ts` exchanges auth code for user session and upserts user record in Prisma
+4. Safe redirect returns the user directly to their previous view (`/builder`, `/projects`, etc.)
 
 ## How It Works
 
@@ -113,20 +112,19 @@ The application includes Google OAuth authentication:
 3. **Refine**: Chat with the AI to modify specific aspects of your website
 4. **Edit**: Make direct code changes in the built-in editor
 5. **Preview**: See live updates in the preview pane
-6. **Export**: Download or deploy your generated website
+6. **Export**: Download standalone ZIP or deploy 1-click to GitHub and Vercel
 
 ## Project Structure
 
-- `/app/builder/page.tsx` - Main builder interface
+- `/app/builder/page.tsx` - Main builder interface with Sandpack sandbox
+- `/app/projects/page.tsx` - Workspace dashboard for saved projects and deployment links
 - `/app/api/generate/route.ts` - API endpoint for code generation
 - `/app/api/refine/route.ts` - API endpoint for code refinement
 - `/app/auth/callback/route.ts` - Supabase OAuth callback handler
-- `/app/auth/error.tsx` - Authentication error page
-- `/app/auth/login/page.tsx` - Google OAuth login page
-- `/app/auth/signup/page.tsx` - Google OAuth signup page
-- `/app/profile/page.tsx` - Example protected profile page
-- `/app/lib/supabase.ts` - Supabase client initialization
-- `/components/Navbar.jsx` - Navigation bar with auth-aware links
+- `/app/auth/error/page.tsx` - Authentication error handler
+- `/lib/auth-client.ts` - Client-side Google OAuth helper
+- `/lib/auth.ts` - Server-side authentication and session verification
+- `/components/Navbar.tsx` - Navigation bar with direct in-place Google sign-in
 - `/components/` - Reusable UI components (PromptInput, PreviewPanel, etc.)
 - `/lib/` - Utility functions (code extraction, prompts, etc.)
 - `/services/` - AI service integration

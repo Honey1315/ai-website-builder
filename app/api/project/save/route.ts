@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { Project } from "@/types/project";
 import { prisma } from "@/lib/prisma";
 import { FileData } from "@/types/ai";
-import { getAuthUserId, verifyProjectOwnership } from "@/lib/auth";
+import { getUser, getAuthUserId, verifyProjectOwnership } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getAuthUserId(request);
+    const supabaseUser = await getUser();
 
-    if (!userId) {
+    if (!supabaseUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = supabaseUser.id;
+
     const projectData: Project = await request.json();
-    console.log("Received project data:", projectData);
     if (!projectData.id || !projectData.name) {
       return NextResponse.json(
         { error: "Project ID and name are required" },
@@ -21,27 +22,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify ownership if project ID exists (update case)
+    // Verify ownership if project already exists in the database
     if (projectData.id) {
-      await verifyProjectOwnership(projectData.id, userId);
+      const existingProject = await prisma.projects.findUnique({
+        where: { id: projectData.id },
+        select: { user_id: true },
+      });
+
+      if (existingProject && existingProject.user_id !== userId) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not own this project" },
+          { status: 403 }
+        );
+      }
     }
 
     // Start a transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
+      // Ensure user exists in our database to satisfy foreign key constraint.
+      // Use real email/name from Supabase so we never create a blank placeholder record.
+      await tx.user.upsert({
+        where: { id: userId },
+        update: {},
+        create: {
+          id: userId,
+          email: supabaseUser.email || '',
+          name: supabaseUser.user_metadata?.full_name ||
+                supabaseUser.email?.split('@')[0] ||
+                'User',
+          image: supabaseUser.user_metadata?.avatar_url ||
+                 supabaseUser.user_metadata?.picture ||
+                 null,
+          createdat: new Date(),
+          updatedat: new Date(),
+        },
+      });
+
       // Upsert the project (update if exists, create if not)
       const project = await tx.projects.upsert({
         where: { id: projectData.id },
         update: {
           name: projectData.name,
           description: projectData.description,
-          thumbnail: projectData.thumbnail,
+          ...(projectData.prompt !== undefined ? { prompt: projectData.prompt } : {}),
+          ...(projectData.github_link !== undefined ? { github_link: projectData.github_link } : {}),
+          ...(projectData.vercel_link !== undefined ? { vercel_link: projectData.vercel_link } : {}),
           updated_at: new Date(),
         },
         create: {
           id: projectData.id,
           name: projectData.name,
           description: projectData.description,
-          thumbnail: projectData.thumbnail,
+          prompt: projectData.prompt ?? null,
+          github_link: projectData.github_link ?? null,
+          vercel_link: projectData.vercel_link ?? null,
           user_id: userId,
           created_at: new Date(),
           updated_at: new Date(),
@@ -92,6 +126,7 @@ export async function POST(request: NextRequest) {
       id: projectWithFiles.id,
       name: projectWithFiles.name,
       description: projectWithFiles.description ?? undefined,
+      prompt: projectWithFiles.prompt ?? undefined,
       code: "",
       files: (projectWithFiles as any).project_files.map((file: any) => ({
         name: file.path,
@@ -101,8 +136,9 @@ export async function POST(request: NextRequest) {
       createdAt: projectWithFiles.created_at,
       updatedAt: projectWithFiles.updated_at,
       userId: projectWithFiles.user_id,
-      thumbnail: projectWithFiles.thumbnail ?? undefined,
       isPublic: false,
+      github_link: projectWithFiles.github_link ?? undefined,
+      vercel_link: projectWithFiles.vercel_link ?? undefined,
     };
 
     return NextResponse.json(responseProject);
@@ -121,6 +157,66 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id, github_link, vercel_link } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Project ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await prisma.projects.findUnique({
+      where: { id },
+      select: { user_id: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 }
+      );
+    }
+
+    if (existing.user_id !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not own this project" },
+        { status: 403 }
+      );
+    }
+
+    const updated = await prisma.projects.update({
+      where: { id },
+      data: {
+        ...(github_link !== undefined ? { github_link } : {}),
+        ...(vercel_link !== undefined ? { vercel_link } : {}),
+        updated_at: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      id: updated.id,
+      github_link: updated.github_link ?? undefined,
+      vercel_link: updated.vercel_link ?? undefined,
+    });
+  } catch (error) {
+    console.error("Error updating project links:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal error" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userId = await getAuthUserId(request);
@@ -132,9 +228,6 @@ export async function GET(request: NextRequest) {
     const projectId = request.nextUrl.searchParams.get("id");
 
     if (projectId) {
-      // Verify ownership of the specific project
-      await verifyProjectOwnership(projectId, userId);
-
       const project = await prisma.projects.findUnique({
         where: { id: projectId },
         include: {
@@ -149,11 +242,19 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      if (project.user_id !== userId) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not own this project" },
+          { status: 403 }
+        );
+      }
+
       // Transform to match the Project type expected by the frontend
       const projectResponse: Project = {
         id: project.id,
         name: project.name,
         description: project.description ?? undefined,
+        prompt: project.prompt ?? undefined,
         code: "",
         files: (project as any).project_files.map((file: any) => ({
           name: file.path,
@@ -163,7 +264,8 @@ export async function GET(request: NextRequest) {
         createdAt: project.created_at,
         updatedAt: project.updated_at,
         userId: project.user_id,
-        thumbnail: project.thumbnail ?? undefined,
+        github_link: project.github_link ?? undefined,
+        vercel_link: project.vercel_link ?? undefined,
       };
 
       return NextResponse.json(projectResponse);
@@ -183,6 +285,7 @@ export async function GET(request: NextRequest) {
       id: project.id,
       name: project.name,
       description: project.description ?? undefined,
+      prompt: project.prompt ?? undefined,
       code: "",
       files: (project as any).project_files.map((file: any) => ({
         name: file.path,
@@ -192,8 +295,9 @@ export async function GET(request: NextRequest) {
       createdAt: project.created_at,
       updatedAt: project.updated_at,
       userId: project.user_id,
-      thumbnail: project.thumbnail ?? undefined,
       isPublic: false,
+      github_link: project.github_link ?? undefined,
+      vercel_link: project.vercel_link ?? undefined,
     }));
 
     return NextResponse.json(projectsResponse);
@@ -229,8 +333,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Verify ownership before deleting
-    await verifyProjectOwnership(projectId, userId);
+    // Verify project exists and check ownership before deleting
+    const project = await prisma.projects.findUnique({
+      where: { id: projectId },
+      select: { user_id: true },
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 }
+      );
+    }
+
+    if (project.user_id !== userId) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not own this project" },
+        { status: 403 }
+      );
+    }
 
     await prisma.projects.delete({
       where: { id: projectId },

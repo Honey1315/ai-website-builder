@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo, Suspense } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import type { FileData, GenerateStreamEvent } from "@/types/ai";
 import PromptInput from "./components/PromptInput";
 import PreviewPanel from "./components/PreviewPanel";
 import CodeEditor from "./components/CodeEditor";
 import ChatPanel from "./components/ChatPanel";
-import SandpackWrapper, { BASE_FILES } from "./components/SandpackWrapper";
-// import SandpackFileExplorer from "./components/SandpackFileExplorer";
-import SandpackSidebar from "./components/SandpackSidebar";
-import DeployButton from "./components/DeployButton";
+import SandpackWrapper from "./components/SandpackWrapper";
+import SandpackFileExplorer from "./components/SandpackFileExplorer";
 import DeployModal from "./components/DeployModal";
 import ModelSelector from "./components/ModelSelector";
 import type { ProjectManifest } from "@/types/contract";
@@ -19,6 +18,8 @@ import { createBrowserClient } from "@supabase/ssr";
 import { Project } from "@/types/project";
 import { DEFAULT_MODEL_PROVIDER, MODEL_CATALOG } from "@/utils/constants";
 import Link from "next/link";
+import { signInWithGoogle } from "@/lib/auth-client";
+import { downloadProjectZip } from "@/lib/zipExporter";
 
 type RefineApiResponse = {
   code?: string;
@@ -34,9 +35,11 @@ function mergeFile(files: FileData[], nextFile: FileData) {
   return updatedFiles;
 }
 
+
+
 function RefineWaitingStatus() {
   return (
-    <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center gap-4">
+    <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center gap-4 shrink-0">
       <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent animate-spin rounded-none"></div>
       <span>[SYS] Refining code architecture...</span>
     </div>
@@ -55,18 +58,93 @@ function BuilderPageInner() {
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [refining, setRefining] = useState(false);
   const [error, setError] = useState("");
+  const [sandpackError, setSandpackError] = useState<string | null>(null);
   const [generationStatus, setGenerationStatus] = useState("");
   const [files, setFiles] = useState<FileData[]>([]);
   const [manifest, setManifest] = useState<ProjectManifest | null>(null);
   const [projectStructure, setProjectStructure] = useState<string[]>([]);
   const [originalPrompt, setOriginalPrompt] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  // Initialized from URL so the state is the single source of truth after mount
   const [projectId, setProjectId] = useState<string | null>(urlProjectId);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [provider, setProvider] = useState<ModelProvider>(DEFAULT_MODEL_PROVIDER);
   const [model, setModel] = useState<string>(MODEL_CATALOG[DEFAULT_MODEL_PROVIDER].defaultModel);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [draftNotification, setDraftNotification] = useState<string>("");
+  type MobileView = "chat" | "preview" | "code";
+  const [mobileView, setMobileView] = useState<MobileView>("chat");
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Click outside and escape key handling for builder menu
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMenuOpen]);
+
+  const handleFileSave = useCallback((filePath: string, updatedCode: string) => {
+    const normalized = filePath.replace(/^\//, "");
+
+    setFiles((prevFiles) => {
+      const index = prevFiles.findIndex(
+        (f) => f.name.replace(/^\//, "") === normalized
+      );
+      if (index === -1) {
+        return [...prevFiles, { name: normalized, content: updatedCode }];
+      }
+      const updated = [...prevFiles];
+      updated[index] = { ...updated[index], content: updatedCode };
+      return updated;
+    });
+
+    if (normalized === "src/App.jsx" || normalized.endsWith("App.jsx")) {
+      setCode(updatedCode);
+    }
+  }, []);
+
+  const handleExportZip = async () => {
+    if (files.length === 0 || isExporting) return;
+    setIsExporting(true);
+    try {
+      const sanitizedName =
+        projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-") ||
+        (originalPrompt ? originalPrompt.trim().split(/\s+/).slice(0, 3).join("-") : "ai-website");
+      await downloadProjectZip(sanitizedName, files, code);
+    } catch (err) {
+      console.error("Failed to export ZIP:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleProviderChange = (nextProvider: ModelProvider) => {
     setProvider(nextProvider);
@@ -83,6 +161,44 @@ function BuilderPageInner() {
     []
   );
 
+  // Monitor auth status
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  // Restore unsaved draft on load if present
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const restoreDraft = searchParams.get("restoreDraft");
+    const savedDraft = localStorage.getItem("ai_builder_draft");
+
+    if (savedDraft && (restoreDraft === "true" || !urlProjectId)) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.files && parsed.files.length > 0) {
+          setFiles(parsed.files);
+          setCode(parsed.code || "");
+          setOriginalPrompt(parsed.originalPrompt || "");
+          if (parsed.provider) setProvider(parsed.provider);
+          if (parsed.model) setModel(parsed.model);
+          setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
+          localStorage.removeItem("ai_builder_draft");
+          setTimeout(() => setDraftNotification(""), 7000);
+        }
+      } catch (e) {
+        console.error("Failed to restore draft:", e);
+      }
+    }
+  }, [searchParams, urlProjectId]);
+
   // Load existing project when URL has ?projectId=
   useEffect(() => {
     if (!urlProjectId) return;
@@ -93,21 +209,53 @@ function BuilderPageInner() {
 
     fetch(`/api/project/save?id=${urlProjectId}`)
       .then((res) => {
+        if (res.status === 401) {
+          throw new Error("AUTH_REQUIRED");
+        }
         if (!res.ok) throw new Error("Failed to load project");
         return res.json();
       })
       .then((project: Project) => {
         if (cancelled) return;
         setProjectId(project.id);
-        setOriginalPrompt(project.description || "");
+        setProjectName(project.name || "");
+        setOriginalPrompt(project.prompt || project.description || "");
         setFiles(project.files || []);
-        // console.log("Loaded project files:", project.files);
         const appFile = project.files?.find((f) => f.name.endsWith("App.jsx"));
         setCode(appFile?.content || project.files?.[0]?.content || "");
+
+        // Restore dependencies from saved package.json so Sandpack and sidebar preserve them
+        const pkgFile = project.files?.find((f) => f.name === "package.json" || f.name === "/package.json");
+        if (pkgFile) {
+          try {
+            const parsed = JSON.parse(pkgFile.content);
+            if (parsed.dependencies) {
+              setManifest((prev) => ({
+                ...(prev || {
+                  files: [],
+                  components: [],
+                  dependencies: {},
+                  architecture: { framework: "react", language: "javascript", styling: "tailwind" },
+                }),
+                packages: { dependencies: parsed.dependencies },
+              }));
+            }
+          } catch (e) {
+            console.error("Failed to parse package.json from loaded project", e);
+          }
+        }
       })
       .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load project");
+        if (!cancelled) {
+          if (err instanceof Error && err.message === "AUTH_REQUIRED") {
+            setError("Authentication required to access this project. Initiating sign-in...");
+            setTimeout(() => {
+              signInWithGoogle('/builder?projectId=' + urlProjectId);
+            }, 1000);
+          } else {
+            setError(err instanceof Error ? err.message : "Failed to load project");
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingProject(false);
@@ -116,11 +264,12 @@ function BuilderPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [urlProjectId]);
+  }, [urlProjectId, router]);
 
   const generateCode = async (prompt: string) => {
     setLoading(true);
     setError("");
+    setSandpackError(null);
     setGenerationStatus("Determining project structure...");
     setCode("");
     setFiles([]);
@@ -163,8 +312,8 @@ function BuilderPageInner() {
           setFiles(event.files);
           setCode(
             event.files.find((file) => file.name.endsWith("App.jsx"))?.content ||
-              event.files[0]?.content ||
-              ""
+            event.files[0]?.content ||
+            ""
           );
           setGenerationStatus("Generating project files...");
           return;
@@ -215,6 +364,7 @@ function BuilderPageInner() {
 
   const refineCode = async (message: string) => {
     setError("");
+    setSandpackError(null);
     setRefining(true);
 
     try {
@@ -271,14 +421,33 @@ function BuilderPageInner() {
   };
 
   const handleSave = useCallback(async () => {
+    if (files.length === 0) return null;
     setIsSaving(true);
     setSaveSuccess(false);
     setError("");
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error("User not authenticated");
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !currentUser) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "ai_builder_draft",
+            JSON.stringify({
+              files,
+              originalPrompt,
+              code,
+              provider,
+              model,
+              timestamp: Date.now(),
+            })
+          );
+        }
+        setDraftNotification("Draft saved locally! Connecting with Google to save project...");
+        setTimeout(() => {
+          signInWithGoogle("/builder?restoreDraft=true");
+        }, 1000);
+        return null;
+      }
 
       // projectId state is the single source of truth — not searchParams
       const id = projectId ?? crypto.randomUUID();
@@ -295,49 +464,38 @@ function BuilderPageInner() {
         throw new Error("Failed to generate project metadata");
       }
 
-      const { name: projectName, description: projectDescription } = await metadataResponse.json();
+      const { name: generatedName, description: projectDescription } = await metadataResponse.json();
+      const finalProjectName = projectName || generatedName || "AI Website";
+      setProjectName(finalProjectName);
 
-      // Ensure Sandpack base files are included (only index.js and public/index.html)
       const allFiles = [...files];
-      const filesToAdd = ["/index.js", "/public/index.html"];
-      
-      filesToAdd.forEach((path) => {
-        const fileData = BASE_FILES[path];
-        if (fileData) {
-          // Only add if not already in files
-          const exists = allFiles.some(f => f.name === path || f.name === path.slice(1));
-          if (!exists) {
-            allFiles.push({
-              name: path.slice(1), // remove leading slash, so it becomes index.js and public/index.html (not in src/)
-              content: fileData.code,
-              language: path.endsWith('.html') ? 'html' : 'javascript'
-            });
-          }
-        }
-      });
-      
-      const hasPackageJson = allFiles.some(f => f.name === 'package.json');
+
+      const hasPackageJson = allFiles.some(f => f.name === 'package.json' || f.name === '/package.json');
       if (!hasPackageJson) {
-         allFiles.push({
-            name: "package.json",
-            content: JSON.stringify({
-              name: projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-              version: "0.1.0",
-              private: true,
-              dependencies: {
-                "react": "^18.2.0",
-                "react-dom": "^18.2.0",
-                "react-scripts": "5.0.1"
-              },
-              scripts: {
-                "start": "react-scripts start",
-                "build": "react-scripts build",
-                "test": "react-scripts test",
-                "eject": "react-scripts eject"
-              }
-            }, null, 2),
-            language: "json"
-         });
+        allFiles.push({
+          name: "package.json",
+          content: JSON.stringify({
+            name: finalProjectName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+            version: "0.1.0",
+            private: true,
+            type: "module",
+            scripts: {
+              dev: "vite",
+              build: "vite build",
+              preview: "vite preview"
+            },
+            dependencies: {
+              "react": "^18.3.1",
+              "react-dom": "^18.3.1",
+              ...(manifest?.packages?.dependencies || {})
+            },
+            devDependencies: {
+              "@vitejs/plugin-react": "^4.3.4",
+              "vite": "^5.4.14"
+            }
+          }, null, 2),
+          language: "json"
+        });
       }
 
       // Update state so the user sees it in their editor right after saving
@@ -345,14 +503,14 @@ function BuilderPageInner() {
 
       const projectData: Project = {
         id,
-        name: projectName,
+        name: finalProjectName,
         description: projectDescription,
+        prompt: originalPrompt || undefined,
         code: "",
         files: allFiles,
         createdAt: new Date(),
         updatedAt: new Date(),
-        userId: user.id,
-        thumbnail: undefined,
+        userId: currentUser.id,
         isPublic: false,
       };
 
@@ -375,60 +533,279 @@ function BuilderPageInner() {
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+      return id;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
+      return null;
     } finally {
       setIsSaving(false);
     }
   }, [files, originalPrompt, projectId, supabase, router, provider, model]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#05080c] text-secondary-50 font-sans relative overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-[#05080c] text-secondary-50 font-sans relative">
       {/* HEADER */}
-      <nav className="bg-secondary-900 border-b border-secondary-800 shrink-0 z-10 relative">
-        <div className="max-w-480 mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/">
-              <div className="flex items-center gap-4 group">
-                <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
+      <nav className="bg-secondary-900 border-b border-secondary-800 shrink-0 z-40 relative">
+        <div className="max-w-480 mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 group">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
                   <span className="text-primary-400 font-mono text-[10px]">AI</span>
                 </div>
-                <span className="text-sm font-display tracking-[0.2em] uppercase text-white hidden sm:block">
+                <span className="text-xs sm:text-sm font-display tracking-[0.2em] uppercase text-white hidden sm:block">
                   Workspace
                 </span>
               </div>
             </Link>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* ModelSelector stays visible on header bar as requested */}
               <ModelSelector
                 provider={provider}
                 model={model}
                 onProviderChange={handleProviderChange}
                 onModelChange={setModel}
               />
-              {isSaving ? (
-                <button disabled className="bg-secondary-800 text-secondary-500 font-mono uppercase tracking-widest text-[10px] px-6 py-2.5 border border-secondary-700 cursor-not-allowed">
+
+              {/* Status indicator if saving or saved */}
+              {isSaving && (
+                <span className="text-secondary-400 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider animate-pulse hidden sm:inline">
                   [ Saving... ]
-                </button>
-              ) : (
-                <button
-                  onClick={handleSave}
-                  className="bg-primary-500 hover:bg-primary-400 text-secondary-900 font-bold font-mono uppercase tracking-widest text-[10px] px-6 py-2.5 border border-primary-500 transition-colors"
-                >
-                  Save Project _
-                </button>
+                </span>
               )}
-              {saveSuccess && <span className="text-primary-400 font-mono text-[10px] uppercase tracking-widest animate-pulse">Success</span>}
-              <DeployButton onClick={() => setIsDeployModalOpen(true)} disabled={files.length === 0} />
+              {saveSuccess && (
+                <span className="text-primary-400 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider animate-pulse hidden sm:inline">
+                  [ Saved ]
+                </span>
+              )}
+
+              {/* Three horizontal parallel lines menu button */}
+              <div className="relative">
+                <button
+                  ref={buttonRef}
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className={`p-2 border transition-all flex items-center justify-center cursor-pointer ${isMenuOpen
+                    ? "border-primary-500 bg-primary-500/10 text-primary-400 shadow-[0_0_12px_rgba(20,184,166,0.25)]"
+                    : "border-secondary-800 bg-secondary-900/80 hover:border-primary-500/60 text-secondary-300 hover:text-primary-400"
+                    }`}
+                  aria-label="Navigation & Actions Menu"
+                  aria-expanded={isMenuOpen}
+                  title="Menu"
+                >
+                  <svg
+                    className="w-5 h-5 transition-transform duration-200"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    {isMenuOpen ? (
+                      <>
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </>
+                    ) : (
+                      <>
+                        <line x1="4" y1="6" x2="20" y2="6" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <line x1="4" y1="18" x2="20" y2="18" />
+                      </>
+                    )}
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {isMenuOpen && (
+                  <div
+                    ref={menuRef}
+                    className="absolute right-0 mt-2 w-60 sm:w-64 bg-secondary-900 border border-secondary-800 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                  >
+                    {/* Decorative corner accent */}
+                    <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-primary-500"></div>
+
+                    {/* User Header if authenticated */}
+                    {user && (
+                      <div className="px-4 py-3 border-b border-secondary-800 bg-[#070b10]">
+                        <div className="text-[9px] font-mono text-primary-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                          <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
+                          SYS_USER
+                        </div>
+                        <div className="text-xs font-mono text-white truncate font-medium">
+                          {user.user_metadata?.full_name || user.email}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Navigation Section: Projects, Profile, Home */}
+                    <div className="py-2 border-b border-secondary-800">
+                      <div className="px-4 pb-1 text-[9px] font-mono uppercase tracking-widest text-secondary-500">
+                        Navigation
+                      </div>
+                      <Link
+                        href="/projects"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
+                          Projects
+                        </span>
+                        <span className="text-[10px] text-secondary-600 group-hover:text-primary-400">↗</span>
+                      </Link>
+                      <Link
+                        href="/"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
+                          Home
+                        </span>
+                        <span className="text-[10px] text-secondary-600 group-hover:text-primary-400 font-mono">/</span>
+                      </Link>
+                    </div>
+
+                    {/* Project Actions Section */}
+                    <div className="py-2">
+                      <div className="px-4 pb-1 text-[9px] font-mono uppercase tracking-widest text-secondary-500">
+                        Project Actions
+                      </div>
+
+                      {/* Save Project */}
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          handleSave();
+                        }}
+                        disabled={files.length === 0 || isSaving}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 disabled:opacity-40 disabled:hover:bg-transparent transition-colors group cursor-pointer text-left"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="w-1.5 h-1.5 bg-primary-400"></span>
+                          {isSaving ? "Saving Project..." : "Save Project"}
+                        </span>
+                        <span className="text-[10px] text-primary-400 font-bold">{saveSuccess ? "✓" : "_"}</span>
+                      </button>
+
+                      {/* Export ZIP */}
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          handleExportZip();
+                        }}
+                        disabled={files.length === 0 || isExporting}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 disabled:opacity-40 disabled:hover:bg-transparent transition-colors group cursor-pointer text-left"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
+                          {isExporting ? "Exporting..." : "Export ZIP"}
+                        </span>
+                        <span className="text-[10px] text-secondary-600 group-hover:text-primary-400 font-mono">.zip</span>
+                      </button>
+
+                      {/* Deploy to Vercel */}
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          setIsDeployModalOpen(true);
+                        }}
+                        disabled={files.length === 0}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 disabled:opacity-40 disabled:hover:bg-transparent transition-colors group cursor-pointer text-left"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
+                          Deploy to Vercel
+                        </span>
+                        <span className="text-[10px] text-secondary-600 group-hover:text-primary-400">▲</span>
+                      </button>
+                    </div>
+
+                    {/* Auth Section */}
+                    {user ? (
+                      <div className="border-t border-secondary-800 p-2">
+                        <button
+                          onClick={async () => {
+                            setIsMenuOpen(false);
+                            await supabase.auth.signOut();
+                            setUser(null);
+                            router.refresh();
+                          }}
+                          className="w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-secondary-500 hover:text-danger-500 hover:bg-danger-500/10 transition-colors cursor-pointer"
+                        >
+                          [ Terminate Session ]
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border-t border-secondary-800 p-3">
+                        <button
+                          onClick={() => {
+                            setIsMenuOpen(false);
+                            signInWithGoogle('/builder');
+                          }}
+                          className="w-full py-2 px-3 text-xs font-mono uppercase tracking-wider bg-primary-500 text-secondary-900 font-bold hover:bg-primary-400 transition-colors text-center cursor-pointer"
+                        >
+                          Sign In with Google
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
-      <DeployModal 
-        isOpen={isDeployModalOpen} 
-        onClose={() => setIsDeployModalOpen(false)} 
-        files={files} 
-        projectName={originalPrompt || "ai-website"} 
+      {/* Mobile View Switcher Tab Bar (< lg only) */}
+      <div className="flex lg:hidden items-center justify-between border-b border-secondary-800 bg-secondary-900/90 backdrop-blur shrink-0 px-2 sm:px-4 py-1.5 z-10 gap-1.5">
+        <button
+          onClick={() => setMobileView("chat")}
+          className={`flex-1 py-1.5 px-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors border cursor-pointer text-center truncate ${mobileView === "chat"
+            ? "bg-primary-500 text-secondary-900 font-bold border-primary-500"
+            : "bg-transparent text-secondary-400 border-secondary-800 hover:text-white"
+            }`}
+        >
+          Input & Chat
+        </button>
+        <button
+          onClick={() => setMobileView("preview")}
+          className={`flex-1 py-1.5 px-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors border cursor-pointer text-center truncate ${mobileView === "preview"
+            ? "bg-primary-500 text-secondary-900 font-bold border-primary-500"
+            : "bg-transparent text-secondary-400 border-secondary-800 hover:text-white"
+            }`}
+        >
+          Live Preview
+        </button>
+        <button
+          onClick={() => setMobileView("code")}
+          className={`flex-1 py-1.5 px-2 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors border cursor-pointer text-center truncate ${mobileView === "code"
+            ? "bg-primary-500 text-secondary-900 font-bold border-primary-500"
+            : "bg-transparent text-secondary-400 border-secondary-800 hover:text-white"
+            }`}
+        >
+          Code & Files
+        </button>
+      </div>
+
+      {/* Real-time Draft & Auth Notification Banner */}
+      {draftNotification && (
+        <div className="bg-primary-500/10 border-b border-primary-500/30 text-primary-400 px-4 py-2 text-xs font-mono flex items-center justify-between z-20">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
+            <span>{draftNotification}</span>
+          </div>
+          <button onClick={() => setDraftNotification("")} className="text-secondary-400 hover:text-white text-xs ml-4 cursor-pointer">✕</button>
+        </div>
+      )}
+
+      <DeployModal
+        isOpen={isDeployModalOpen}
+        onClose={() => setIsDeployModalOpen(false)}
+        files={files}
+        projectName={projectName || (originalPrompt ? originalPrompt.trim().split(/\s+/).slice(0, 3).join("-") : "ai-website")}
+        projectId={projectId}
+        onSaveProject={handleSave}
       />
 
       {/* Loading overlay when fetching an existing project */}
@@ -437,7 +814,7 @@ function BuilderPageInner() {
           <div className="flex flex-col items-center gap-6 p-12 bg-secondary-900 border border-secondary-800 shadow-2xl relative">
             {/* Corner accent */}
             <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-50"></div>
-            
+
             <div className="relative w-12 h-12 flex items-center justify-center">
               <div className="absolute inset-0 border border-secondary-800 rounded-none"></div>
               <div className="absolute inset-0 border border-primary-400 animate-[spin_2s_linear_infinite] [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"></div>
@@ -451,32 +828,34 @@ function BuilderPageInner() {
       )}
 
       {/* Main Layout - Split Panel Design */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-0">
-        
+      <div className="flex-1 flex flex-col lg:flex-row relative z-0">
+
         {/* Left Sidebar (Generate & Chat) */}
-        <div className="w-full lg:w-105 flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 overflow-y-auto">
+        <div className={`w-full lg:w-105 flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto ${mobileView === "chat" ? "flex flex-1 lg:flex-initial" : "hidden lg:flex"
+          }`}>
           {/* GENERATE */}
-          <div className="p-6 border-b border-secondary-800">
+          <div className="p-4 sm:p-6 border-b border-secondary-800 shrink-0">
             <h2 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-secondary-600 block"></span> 
+              <span className="w-1.5 h-1.5 bg-secondary-600 block"></span>
               Input Parameters
             </h2>
             <PromptInput onSubmit={generateCode} />
           </div>
 
           {/* CHAT */}
-          <div className="flex-1 p-6 flex flex-col min-h-75">
+          <div className="p-4 sm:p-6 flex flex-col shrink-0">
             <h3 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-primary-400 block"></span> 
+              <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
               System Logs / Refine
             </h3>
-            <ChatPanel onSend={refineCode} />
+            <ChatPanel onSend={refineCode} error={sandpackError} isAuthenticated={!!user} />
           </div>
         </div>
 
         {/* Right Workspace (Main Content) */}
-        <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-6 bg-[#0a0f16] relative">
-          
+        <div className={`flex-1 p-3 sm:p-6 overflow-y-auto flex flex-col gap-4 sm:gap-6 bg-[#0a0f16] relative ${mobileView !== "chat" ? "flex" : "hidden lg:flex"
+          }`}>
+
           {error && (
             <div className="border border-danger-500/50 bg-danger-500/10 text-danger-500 p-4 font-mono text-xs tracking-widest uppercase flex gap-4 items-start shrink-0">
               <span className="font-bold mt-0.5">ERR:</span>
@@ -524,34 +903,32 @@ function BuilderPageInner() {
             </div>
           )}
 
-          {!loading && !refining && !isLoadingProject ? (
-            <div className="w-full flex-1 flex flex-col min-h-0">
-              <SandpackWrapper
-                code={code}
-                files={files}
-                dependencies={manifest?.packages.dependencies || {}}
-              >
-                <div className="w-full flex flex-col gap-6">
+          <div className={`w-full flex-1 flex flex-col min-h-0 relative ${isLoadingProject ? "hidden" : "flex"}`}>
+            <SandpackWrapper
+              code={code}
+              files={files}
+              dependencies={manifest?.packages.dependencies || {}}
+              onErrorChange={setSandpackError}
+            >
+              <div className="w-full flex flex-col gap-4 sm:gap-6">
                 {/* Editor Section */}
-                  <div className="w-full h-125 xl:h-150 flex gap-4 shrink-0">
-                    <div className="flex-[2_2_0%] min-w-0 h-full">
-                      <SandpackSidebar /> {/* <-- New Component */}
-                    </div>
-                    <div className="flex-[8_8_0%] min-w-0 h-full border border-secondary-800 bg-[#05080c]">
-                      <CodeEditor onSave={setCode} />
-                    </div>
+                <div className={`w-full h-[480px] xl:h-[540px] flex flex-col md:flex-row gap-3 sm:gap-4 shrink-0 ${mobileView === "preview" ? "hidden lg:flex" : "flex"
+                  }`}>
+                  <div className="h-48 sm:h-56 md:h-full md:flex-[2_2_0%] min-w-0 shrink-0">
+                    <SandpackFileExplorer />
                   </div>
-                  {/* Preview Section */}
-                  <div className="w-full h-150 xl:h-200 shrink-0 border border-secondary-800 bg-white relative">
-                    {/* <div className="absolute -top-3 -left-3 bg-secondary-900 border border-secondary-800 text-[10px] font-mono text-primary-400 uppercase tracking-widest px-3 py-1 z-10">
-                      Live_Preview
-                    </div> */}
-                    <PreviewPanel />
+                  <div className="flex-1 md:h-full md:flex-[8_8_0%] min-w-0 border border-secondary-800 bg-[#05080c] shrink-0">
+                    <CodeEditor onSaveFile={handleFileSave} onSave={setCode} />
                   </div>
                 </div>
-              </SandpackWrapper>
-            </div>
-          ) : null}
+                {/* Preview Section */}
+                <div className={`w-full h-[580px] xl:h-[680px] shrink-0 border border-secondary-800 bg-white relative ${mobileView === "code" ? "hidden lg:block" : "block"
+                  }`}>
+                  <PreviewPanel error={sandpackError} onAutoFix={refineCode} />
+                </div>
+              </div>
+            </SandpackWrapper>
+          </div>
         </div>
       </div>
     </div>
@@ -565,16 +942,16 @@ export default function BuilderPage() {
     <Suspense
       fallback={
         <div className="h-screen flex items-center justify-center bg-[#05080c]">
-           <div className="flex flex-col items-center gap-6 p-12 relative">
-             <div className="relative w-12 h-12 flex items-center justify-center">
-               <div className="absolute inset-0 border border-secondary-800 rounded-none"></div>
-               <div className="absolute inset-0 border border-primary-400 animate-[spin_2s_linear_infinite] [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"></div>
-               <div className="w-2 h-2 bg-primary-400 animate-pulse"></div>
-             </div>
-             <p className="text-[10px] font-mono text-secondary-500 uppercase tracking-[0.2em]">
-               SYS_INITIALIZING...
-             </p>
-           </div>
+          <div className="flex flex-col items-center gap-6 p-12 relative">
+            <div className="relative w-12 h-12 flex items-center justify-center">
+              <div className="absolute inset-0 border border-secondary-800 rounded-none"></div>
+              <div className="absolute inset-0 border border-primary-400 animate-[spin_2s_linear_infinite] [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"></div>
+              <div className="w-2 h-2 bg-primary-400 animate-pulse"></div>
+            </div>
+            <p className="text-[10px] font-mono text-secondary-500 uppercase tracking-[0.2em]">
+              SYS_INITIALIZING...
+            </p>
+          </div>
         </div>
       }
     >

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
+  const next = requestUrl.searchParams.get('next') || '/';
 
   if (code) {
     const cookieStore = await cookies();
@@ -14,16 +15,19 @@ export async function GET(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
+          getAll() {
+            return cookieStore.getAll();
           },
-          set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Ignore in read-only contexts
+            }
           },
-          remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
-          }
-        }
+        },
       }
     );
 
@@ -63,7 +67,21 @@ export async function GET(request: Request) {
     }
   }
 
-  // Redirect to home page or a specific page after sign in
-  const url = requestUrl.origin;
-  return NextResponse.redirect(url);
+  // Safe redirect: decode then re-validate to prevent encoded bypass attacks (e.g. /%2F/evil.com).
+  // Build the target URL against our own origin — if `next` is absolute or escapes the origin
+  // after normalisation, Next.js will throw and we fall back to '/'.
+  let safeRedirectUrl: URL;
+  try {
+    const decoded = decodeURIComponent(next);
+    // Must start with '/' and must not be a protocol-relative URL
+    if (!decoded.startsWith('/') || decoded.startsWith('//')) throw new Error('invalid');
+    // Construct against origin — this normalises traversal sequences
+    const candidate = new URL(decoded, requestUrl.origin);
+    // Final guard: the resolved origin must still match ours
+    if (candidate.origin !== requestUrl.origin) throw new Error('origin mismatch');
+    safeRedirectUrl = candidate;
+  } catch {
+    safeRedirectUrl = new URL('/', requestUrl.origin);
+  }
+  return NextResponse.redirect(safeRedirectUrl);
 }

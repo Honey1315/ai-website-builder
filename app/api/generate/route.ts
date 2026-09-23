@@ -7,6 +7,8 @@ import { getLanguageFromFilename } from "@/lib/extractCode";
 import { resolveProviderOptions } from "@/lib/openrouter";
 
 import { getAuthUserId } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rateLimit";
+import { localFileSummary } from "@/lib/extractFileSummary";
 
 import type { ProviderOptions } from "@/types/ai";
 
@@ -15,6 +17,8 @@ import {
   isCodegenFile,
 
   orderedManifestFiles,
+
+  ensureMissingImportsExist,
 
 } from "@/lib/contractHelpers";
 
@@ -33,6 +37,13 @@ import type {
   ValidationMismatch,
 
 } from "@/types/contract";
+
+// Inter-request pace delay — prevents bursting free-tier RPM limits when generating multi-file projects
+const GENERATION_PACE_MS = 550;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 
 
@@ -54,7 +65,7 @@ export type GenerateStreamEvent =
 
   | { type: "error"; error: string };
 
- 
+
 
 const encoder = new TextEncoder();
 
@@ -175,6 +186,7 @@ async function runContractFirstStream(
 
 
   const fileNames = orderedManifestFiles(manifest).filter(isCodegenFile);
+  console.log("fileNames", fileNames);
 
   const placeholderFiles = fileNames.map(createPlaceholderFile);
 
@@ -210,7 +222,9 @@ async function runContractFirstStream(
 
       [],
 
-      options
+      options,
+
+      generatedFiles
 
     );
 
@@ -228,11 +242,9 @@ async function runContractFirstStream(
 
     }
 
-
-
-    summaries.set(fileName, await AIService.generateFileSummary(fileName, file.content, options));
-
-
+    // Local regex extraction — no LLM call. Updates summaries so the NEXT file
+    // in the loop receives real exported signatures (code is the ground truth).
+    summaries.set(fileName, localFileSummary(fileName, file.content));
 
     index += 1;
 
@@ -253,6 +265,9 @@ async function runContractFirstStream(
     );
 
     // console.log("Generated file:", fileName); // Log each generated file
+
+    // Pace requests to avoid tripping OpenRouter / NVIDIA free-tier RPM limits
+    if (index < fileNames.length) await sleep(GENERATION_PACE_MS);
 
   }
 
@@ -368,6 +383,8 @@ async function runContractFirstStream(
 
 
 
+  finalFiles = ensureMissingImportsExist(finalFiles);
+
   const appFile =
 
     finalFiles.find((file) => file.name.endsWith("App.jsx")) || finalFiles[0];
@@ -403,8 +420,22 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await getAuthUserId(request);
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Freemium model: guests can generate but get a tighter rate limit.
+    // Authenticated users get a higher allowance.
+    const rateLimitKey = userId
+      ? `generate:user:${userId}`
+      : `generate:ip:${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}`;
+    const rateLimitMax = userId ? 10 : 3; // 10 for signed-in, 3 for guests
+
+    const rl = checkRateLimit(rateLimitKey, rateLimitMax, 10 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait before generating again." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+        }
+      );
     }
 
     const body = await request.json();
@@ -420,6 +451,13 @@ export async function POST(request: NextRequest) {
 
       );
 
+    }
+
+    if (prompt.length > 4000) {
+      return NextResponse.json(
+        { error: "Prompt exceeds maximum length of 4000 characters" },
+        { status: 400 }
+      );
     }
 
     const options = resolveProviderOptions(body);

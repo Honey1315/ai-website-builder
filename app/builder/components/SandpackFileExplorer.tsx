@@ -16,9 +16,10 @@ export default function SandpackFileExplorer() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto relative bg-[#05080c]">
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           .explorer-wrapper .sp-file-explorer { background: transparent; padding: 0.5rem; }
-          .explorer-wrapper .sp-file-explorer .sp-button { color: var(--color-secondary-400); font-family: monospace; font-size: 11px; border-radius: 0; padding: 8px 12px; margin-bottom: 2px; text-transform: lowercase; letter-spacing: 0.05em; transition: all 0.2s; }
+          .explorer-wrapper .sp-file-explorer .sp-button { color: var(--color-secondary-400); font-family: monospace; font-size: 11px; border-radius: 0; padding: 8px 12px; margin-bottom: 2px; letter-spacing: 0.05em; transition: all 0.2s; }
           .explorer-wrapper .sp-file-explorer .sp-button:hover { background: var(--color-secondary-900); color: white; }
           .explorer-wrapper .sp-file-explorer .sp-button[data-active="true"] { background: rgba(79, 209, 197, 0.1); color: var(--color-primary-400); border-left: 2px solid var(--color-primary-500); padding-left: 10px; }
         `}} />

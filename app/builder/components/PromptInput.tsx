@@ -19,6 +19,7 @@ export default function PromptInput({ onSubmit }: any) {
       </div>
 
       <button
+        suppressHydrationWarning
         className="w-full flex items-center justify-center gap-3 px-6 py-4 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none border border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
         onClick={() => {
           if (prompt.trim()) onSubmit(prompt);

@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUserId } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { decryptToken } from "@/lib/encryption";
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get("x-vercel-token");
+    let token = request.headers.get("x-vercel-token");
+    if (!token) {
+      const userId = await getAuthUserId(request);
+      if (userId) {
+        const tokenId = request.headers.get("x-vercel-token-id") || request.nextUrl.searchParams.get("tokenId");
+        if (tokenId) {
+          const savedRecord = await prisma.user_tokens.findFirst({
+            where: { id: tokenId, user_id: userId, provider: "vercel" },
+          });
+          if (savedRecord) token = decryptToken(savedRecord.encrypted_token);
+        }
+        if (!token) {
+          const defaultRecord = await prisma.user_tokens.findFirst({
+            where: { user_id: userId, provider: "vercel" },
+            orderBy: { updated_at: "desc" },
+          });
+          if (defaultRecord) token = decryptToken(defaultRecord.encrypted_token);
+        }
+      }
+    }
+
     if (!token) {
       return NextResponse.json({ error: "Missing Vercel token" }, { status: 401 });
     }

@@ -4,20 +4,24 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  prompt?: string;
   code: string;
   files: FileData[];
   createdAt: Date;
   updatedAt: Date;
   userId?: string;
-  thumbnail?: string;
   isPublic?: boolean;
+  github_link?: string;
+  vercel_link?: string;
 }
 
 export interface ProjectMetadata {
   id: string;
   name: string;
   description?: string;
+  prompt?: string;
   createdAt: Date;
   updatedAt: Date;
-  thumbnail?: string;
+  github_link?: string;
+  vercel_link?: string;
 }

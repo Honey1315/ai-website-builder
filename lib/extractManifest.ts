@@ -6,36 +6,35 @@ import {
   ProjectPackages,
 } from "@/types/contract";
 
-const DEFAULT_FILES = ["src/App.jsx", "src/styles.css"];
+const DEFAULT_FILES = [
+  "src/App.jsx"
+];
 
 const DEFAULT_ARCHITECTURE: ProjectArchitecture = {
   framework: "react",
   language: "javascript",
-  styling: "css",
+  styling: "tailwind",
 };
 
 const DEFAULT_PACKAGES: ProjectPackages = {
   dependencies: {
-    react: "^19",
-    "react-dom": "^19",
-    "react-router-dom": "^7",
-    uuid: "^9",
+    react: "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.5",
+    "lucide-react": "^0.475.0"
   },
 };
 
 function extractJsonBlock(response: string): string {
   const trimmed = response.trim();
-
   const fencedMatch = trimmed.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
   if (fencedMatch) {
     return fencedMatch[1].trim();
   }
-
   const objectMatch = trimmed.match(/\{[\s\S]*\}/);
   if (objectMatch) {
     return objectMatch[0];
   }
-
   return trimmed;
 }
 
@@ -52,7 +51,6 @@ function normalizeComponents(components: unknown): ComponentContract[] {
     .map((item) => {
       const name = String(item.name || "").trim();
       const file = typeof item.file === "string" ? normalizeFilePath(item.file) : undefined;
-
       return {
         name,
         file: file || (name ? componentFilePath(name) : undefined),
@@ -66,14 +64,11 @@ function normalizeDependencies(dependencies: unknown): Record<string, string[]> 
   if (!dependencies || typeof dependencies !== "object" || Array.isArray(dependencies)) {
     return {};
   }
-
   const result: Record<string, string[]> = {};
-
   Object.entries(dependencies as Record<string, unknown>).forEach(([parent, children]) => {
     if (!Array.isArray(children)) return;
     result[parent] = children.filter((child): child is string => typeof child === "string");
   });
-
   return result;
 }
 
@@ -81,9 +76,7 @@ function normalizeArchitecture(architecture: unknown): ProjectArchitecture {
   if (!architecture || typeof architecture !== "object" || Array.isArray(architecture)) {
     return DEFAULT_ARCHITECTURE;
   }
-
   const arch = architecture as Record<string, unknown>;
-
   return {
     framework: typeof arch.framework === "string" ? arch.framework : DEFAULT_ARCHITECTURE.framework,
     language: typeof arch.language === "string" ? arch.language : DEFAULT_ARCHITECTURE.language,
@@ -97,32 +90,25 @@ function normalizePackages(
   if (!packages || typeof packages !== "object" || Array.isArray(packages)) {
     return { dependencies: {} };
   }
-
   const deps = (packages as Record<string, unknown>).dependencies;
-
   if (!deps || typeof deps !== "object" || Array.isArray(deps)) {
     return { dependencies: {} };
   }
-
   const dependencies: Record<string, string> = {};
-
   Object.entries(deps as Record<string, unknown>).forEach(([name, version]) => {
     if (typeof version === "string") {
       dependencies[name] = version;
     }
   });
-
   return { dependencies };
 }
 
 function normalizeFilePaths(files: unknown): string[] {
   if (!Array.isArray(files)) return [];
-
   const normalized = files
     .filter((file): file is string => typeof file === "string")
     .map((file) => normalizeFilePath(file))
     .filter(Boolean);
-
   return Array.from(new Set(normalized));
 }
 
@@ -133,14 +119,18 @@ function normalizeFilePath(fileName: string): string {
     .replace(/^\/+/, "")
     .replace(/^\.\/+/, "");
 
-  if (normalized === "App.jsx" || normalized === "styles.css") {
+  // Don't prepend src/ to Vite config and root HTML
+  if (["index.html", "vite.config.js"].includes(normalized)) {
+    return normalized;
+  }
+
+  if (normalized === "App.jsx" || normalized === "main.jsx" || normalized === "index.css") {
     return `src/${normalized}`;
   }
 
   if (normalized.startsWith("components/")) {
     return `src/${normalized}`;
   }
-
   return normalized;
 }
 
@@ -192,16 +182,9 @@ export function createFallbackManifest(
   prompt: string,
   structure: string[] = []
 ): ProjectManifest {
-  const isComplex =
-    prompt.length > 120 ||
-    /dashboard|multi|several|multiple|table|form|modal|sidebar/i.test(prompt);
-
-  const files =
-    structure.length > 0
+  const files = structure.length > 0
       ? ensureRequiredFiles(structure)
-      : isComplex
-        ? ["src/App.jsx", "src/styles.css"]
-        : ["src/App.jsx", "src/styles.css"];
+      : [...DEFAULT_FILES];
 
   const components = files
     .filter((file) => file.startsWith("src/components/"))

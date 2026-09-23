@@ -1,18 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUserId } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { decryptToken } from "@/lib/encryption";
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get("x-vercel-token");
-    if (!token) {
-      return NextResponse.json({ error: "Missing Vercel token" }, { status: 401 });
+    const userId = await getAuthUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { repoFullName, projectName, framework = "create-react-app", repoId: bodyRepoId } = await request.json();
+    const body = await request.json();
+    const { repoFullName, projectName, framework = "vite", repoId: bodyRepoId, tokenId } = body as {
+      repoFullName?: string;
+      projectName?: string;
+      framework?: string;
+      repoId?: number;
+      tokenId?: string;
+    };
+
+    let token = request.headers.get("x-vercel-token");
+    if (!token && tokenId) {
+      const savedRecord = await prisma.user_tokens.findFirst({
+        where: { id: tokenId, user_id: userId, provider: "vercel" },
+      });
+      if (savedRecord) {
+        token = decryptToken(savedRecord.encrypted_token);
+      }
+    }
+    if (!token) {
+      const defaultRecord = await prisma.user_tokens.findFirst({
+        where: { user_id: userId, provider: "vercel" },
+        orderBy: { updated_at: "desc" },
+      });
+      if (defaultRecord) {
+        token = decryptToken(defaultRecord.encrypted_token);
+      }
+    }
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Missing Vercel token. Please provide or save a Vercel token." },
+        { status: 401 }
+      );
+    }
     if (!repoFullName) {
       return NextResponse.json({ error: "Missing GitHub repository full name" }, { status: 400 });
     }
 
-    const finalProjectName = (projectName || "ai-website").toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 100);
+    // Always prioritize the repository name for the Vercel project and URL
+    const repoNameOnly = repoFullName.includes('/') ? repoFullName.split('/')[1] : repoFullName;
+    const targetName = repoNameOnly || projectName || "ai-website";
+    const finalProjectName = targetName
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 100);
 
     // 1. Create Vercel Project
     const createProjectRes = await fetch("https://api.vercel.com/v9/projects", {

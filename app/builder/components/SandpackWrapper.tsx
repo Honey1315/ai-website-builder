@@ -3,46 +3,275 @@
 import {
   SandpackProvider,
   SandpackLayout,
+  useSandpack,
 } from "@codesandbox/sandpack-react";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
 import type { FileData } from "@/types/ai";
 
 interface SandpackWrapperProps {
   code: string;
   files?: FileData[];
   dependencies?: Record<string, string>;
+  onErrorChange?: (error: string | null) => void;
   children: ReactNode;
+}
+
+function cleanErrorMessage(raw: string): string {
+  if (!raw) return "";
+  // Strip leading Uncaught Error prefixes
+  let msg = raw.replace(/^Uncaught\s+([A-Za-z]*Error:\s*)?/, "");
+  // Replace long bundler CDN bundle URLs with clean module identifiers
+  msg = msg.replace(
+    /https?:\/\/[^\s'"]+\/(?:node_modules\/\.vite\/deps\/)?([a-zA-Z0-9_@.-]+)\.js\?[^\s'"]*/g,
+    "'$1'"
+  );
+  // Normalize redundant adjacent quotes if any
+  msg = msg.replace(/''([a-zA-Z0-9_@.-]+)''/g, "'$1'");
+  return msg.trim();
+}
+
+function SandpackErrorObserver({
+  onErrorChange,
+}: {
+  onErrorChange?: (error: string | null) => void;
+}) {
+  const { sandpack, listen } = useSandpack();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingErrorRef = useRef<string | null>(null);
+
+  const scheduleErrorNotification = useCallback(
+    (rawError: string) => {
+      const cleaned = cleanErrorMessage(rawError);
+      if (!cleaned) return;
+      pendingErrorRef.current = cleaned;
+
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+
+      // 5-second debounce gives large Vite apps and CDN packages ample time to settle
+      timerRef.current = setTimeout(() => {
+        if (pendingErrorRef.current) {
+          onErrorChange?.(pendingErrorRef.current);
+        }
+      }, 5000);
+    },
+    [onErrorChange]
+  );
+
+  const clearErrorNotification = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    pendingErrorRef.current = null;
+    onErrorChange?.(null);
+  }, [onErrorChange]);
+
+  // 1. Listen to Sandpack internal bundler errors
+  useEffect(() => {
+    if (sandpack.error) {
+      scheduleErrorNotification(sandpack.error.message);
+    }
+  }, [sandpack.error, scheduleErrorNotification]);
+
+  // 2. Listen to Sandpack protocol messages
+  useEffect(() => {
+    const unsubscribe = listen((message: any) => {
+      if (message.type === "start") {
+        clearErrorNotification();
+      } else if (message.type === "action" && message.action === "show-error") {
+        const msg = message.title || message.message;
+        if (msg) scheduleErrorNotification(msg);
+      } else if (
+        message.type === "action" &&
+        message.action === "notification" &&
+        message.notificationType === "error"
+      ) {
+        if (message.title) scheduleErrorNotification(message.title);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [listen, clearErrorNotification, scheduleErrorNotification]);
+
+  // 3. Listen to cross-frame postMessage events sent from /index.html and /src/main.jsx
+  useEffect(() => {
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (!event.data || typeof event.data !== "object") return;
+
+      if (event.data.type === "SANDPACK_PREVIEW_ERROR") {
+        const msg = event.data.message;
+        if (msg) {
+          scheduleErrorNotification(msg);
+        }
+      } else if (event.data.type === "SANDPACK_PREVIEW_SUCCESS") {
+        if (!sandpack.error) {
+          clearErrorNotification();
+        }
+      }
+    };
+
+    window.addEventListener("message", handleWindowMessage);
+    return () => {
+      window.removeEventListener("message", handleWindowMessage);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [sandpack.error, clearErrorNotification, scheduleErrorNotification]);
+
+  return null;
 }
 
 type SandpackFileEntry = { code: string; hidden?: boolean };
 type SandpackFileMap = Record<string, SandpackFileEntry>;
 
 /**
- * Base files that are always present but hidden from the editor.
- * These are the lowest-priority defaults — any file in the `files` prop
- * with the same key will override them.
+ * Base files that lay the foundation for the React + Tailwind in-memory live preview environment.
  */
 export const BASE_FILES: SandpackFileMap = {
-  "/src/index.js": {
+  "/index.js": {
     code: `import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
+import * as AppModule from './src/App.jsx';
+import './src/index.css';
 import './styles.css';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);`,
+const App = AppModule.default || AppModule.App || Object.values(AppModule).find(v => typeof v === 'function') || (() => React.createElement('div', { className: 'p-8 text-center font-mono text-gray-400' }, 'Component rendered.'));
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error) {
+    try {
+      window.parent.postMessage({
+        type: "SANDPACK_PREVIEW_ERROR",
+        message: error?.message || String(error)
+      }, "*");
+    } catch(e) {}
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '24px', color: '#f87171', fontFamily: 'monospace', backgroundColor: '#090d16', minHeight: '100vh', border: '1px solid #ef4444' }}>
+          <h2 style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#fca5a5' }}>⚡ [PREVIEW_RENDER_ERROR]</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.5' }}>{this.state.error?.message || String(this.state.error)}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+try {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>
+    );
+    try {
+      window.parent.postMessage({ type: "SANDPACK_PREVIEW_SUCCESS" }, "*");
+    } catch(e) {}
+  }
+} catch (err) {
+  try {
+    window.parent.postMessage({
+      type: "SANDPACK_PREVIEW_ERROR",
+      message: err?.message || String(err)
+    }, "*");
+  } catch(e) {}
+}`,
     hidden: true,
   },
   "/public/index.html": {
     code: `<!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Website Builder</title>
+    <!-- Tailwind CSS CDN for instant real-time styling in preview -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      try {
+        window.tailwind = window.tailwind || {};
+        tailwind.config = {
+          darkMode: 'class',
+          theme: { extend: {} },
+        };
+      } catch(e) {}
+    </script>
+    <script>
+      (function() {
+        function notifyError(err) {
+          try {
+            window.parent.postMessage({
+              type: "SANDPACK_PREVIEW_ERROR",
+              message: String(err)
+            }, "*");
+          } catch (e) {}
+        }
+
+        // Catch uncaught module/syntax/runtime errors
+        window.addEventListener('error', function(event) {
+          var msg = event.message;
+          if (!msg && event.error) {
+            msg = event.error.message || String(event.error);
+          }
+          if (!msg && event.target && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) {
+            msg = "Failed to load resource: " + (event.target.src || event.target.href);
+          }
+          if (msg) notifyError(msg);
+        }, true);
+
+        // Catch unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(event) {
+          var msg = event.reason ? (event.reason.message || event.reason.stack || String(event.reason)) : "Unhandled Promise Rejection";
+          notifyError(msg);
+        });
+
+        // Intercept console.error for React error boundaries & bundler errors
+        var origError = console.error;
+        console.error = function() {
+          origError.apply(console, arguments);
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            if (arg instanceof Error) {
+              parts.push(arg.message || arg.stack);
+            } else if (typeof arg === 'object' && arg !== null) {
+              try { parts.push(JSON.stringify(arg)); } catch(e) { parts.push(String(arg)); }
+            } else {
+              parts.push(String(arg));
+            }
+          }
+          var combined = parts.join(' ');
+          if (
+            combined.includes("doesn't provide an export") ||
+            combined.includes("The requested module") ||
+            combined.includes("Uncaught") ||
+            combined.includes("is not defined") ||
+            combined.includes("Cannot read propert") ||
+            combined.includes("Failed to resolve")
+          ) {
+            notifyError(combined);
+          }
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
@@ -50,14 +279,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 </html>`,
     hidden: true,
   },
-  "/src/App.jsx" : {
-    code: `import React from 'react';
-export default function App() {
-  return <div>Ready to render...</div>;
-}`,
-    hidden: false,
+  "/App.js": {
+    code: `import * as AppModule from "./src/App.jsx";
+const App = AppModule.default || AppModule.App || Object.values(AppModule).find(v => typeof v === 'function');
+export default App;`,
+    hidden: true,
   },
-  "/src/styles.css": {
+  "/styles.css": {
     code: `* {
   margin: 0;
   padding: 0;
@@ -65,60 +293,119 @@ export default function App() {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }`,
     hidden: true,
   },
-};
+  "/src/App.jsx": {
+    code: `export default function App() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-900 text-white">
+      <h1 className="text-2xl font-bold">Ready to render...</h1>
+    </div>
+  );
+}`,
+    hidden: false,
+  },
+  "/src/index.css": {
+    code: `@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/**
- * Default minimal global CSS — only used when no CSS file is provided.
- */
-const DEFAULT_CSS = `* {
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-}`;
+}`,
+    hidden: true,
+  },
+};
+
+const BUILD_ONLY_DEPENDENCIES = new Set([
+  "tailwindcss",
+  "@tailwindcss/vite",
+  "@tailwindcss/postcss",
+  "@tailwindcss/typography",
+  "@tailwindcss/forms",
+  "postcss",
+  "postcss-load-config",
+  "autoprefixer",
+  "vite",
+  "@vitejs/plugin-react",
+  "@vitejs/plugin-react-swc",
+]);
 
 export default function SandpackWrapper({
   files,
   children,
   dependencies,
+  onErrorChange,
 }: SandpackWrapperProps) {
-  // Start with the hidden base files (entrypoint + html)
   const sandpackFiles: SandpackFileMap = { ...BASE_FILES };
-  const DEFAULT_DEPENDENCIES = {
-    react: "latest",
-    "react-dom": "latest",
-    "react-is" : "latest",
-  };
 
-  const latestDependencies: Record<string, string> = Object.fromEntries(
-    Object.keys(dependencies ?? {}).map((key) => [key, "latest"])
+  const safeDependencies = useMemo(() => {
+    const filtered: Record<string, string> = {};
+    if (dependencies) {
+      for (const [key, value] of Object.entries(dependencies)) {
+        if (!BUILD_ONLY_DEPENDENCIES.has(key)) {
+          filtered[key] = value;
+        }
+      }
+    }
+    return {
+      react: "^18.3.1",
+      "react-dom": "^18.3.1",
+      "lucide-react": "^0.475.0",
+      clsx: "^2.1.1",
+      "tailwind-merge": "^2.6.0",
+      ...filtered,
+    };
+  }, [dependencies]);
+
+  const customSetup = useMemo(
+    () => ({
+      dependencies: safeDependencies,
+      entry: "/index.js",
+    }),
+    [safeDependencies]
   );
 
   if (files && files.length > 0) {
-    // Merge provided files — normalise paths to absolute sandpack keys
+    // Merge provided files — normalize paths to absolute sandpack keys
     files.forEach((file) => {
       const key = file.name.startsWith("/") ? file.name : `/${file.name}`;
+      // Never pass build/config files or internal entry wrappers to the in-browser Sandpack bundler.
+      // Sandpack handles dependencies via customSetup.dependencies, and Tailwind via CDN.
+      if (
+        key === "/package.json" ||
+        key === "/package-lock.json" ||
+        key === "/index.html" ||
+        key === "/public/index.html" ||
+        key === "/src/main.jsx" ||
+        key === "/index.js" ||
+        key === "/App.js" ||
+        key === "/vite.config.js" ||
+        key === "/vite.config.ts" ||
+        key === "/postcss.config.js" ||
+        key === "/tailwind.config.js"
+      ) {
+        return;
+      }
       sandpackFiles[key] = { code: file.content, hidden: false };
     });
 
-    // If no CSS file was provided, inject the default global CSS so
-    // the /index.js import of './src/styles.css' doesn't 404.
-    const hasCss = files.some((f) => f.name.endsWith(".css"));
-    if (!hasCss) {
-      sandpackFiles["/src/styles.css"] = { code: DEFAULT_CSS, hidden: true };
+    // If project has App.jsx at root instead of /src/App.jsx, ensure /src/App.jsx is mapped
+    if (sandpackFiles["/App.jsx"] && !sandpackFiles["/src/App.jsx"]) {
+      sandpackFiles["/src/App.jsx"] = sandpackFiles["/App.jsx"];
     }
   }
 
-  // Custom technical theme for Sandpack
   const customTheme = {
     colors: {
       surface1: "#05080c",
@@ -134,7 +421,7 @@ export default function SandpackWrapper({
     },
     syntax: {
       plain: "#e2e8f0",
-      comment: { color: "#718096", fontStyle: "italic" },
+      comment: { color: "#718096", fontStyle: "italic" as const },
       keyword: "#4fd1c5",
       tag: "#9deee5",
       punctuation: "#a0aec0",
@@ -151,24 +438,25 @@ export default function SandpackWrapper({
     },
   };
 
+  const sandpackOptions = useMemo(
+    () => ({
+      autorun: true,
+      autoReload: false,
+      activeFile: "/src/App.jsx",
+      externalResources: ["https://cdn.tailwindcss.com"],
+    }),
+    []
+  );
+
   return (
     <SandpackProvider
       template="react"
       files={sandpackFiles}
-      customSetup={{
-        entry: "/src/index.js",
-        dependencies: {
-          ...DEFAULT_DEPENDENCIES,
-          ...latestDependencies,
-        },
-      }}
+      customSetup={customSetup}
       theme={customTheme}
-      options={{
-        autorun: true,
-        autoReload: true,
-        activeFile: "/src/App.jsx",
-      }}
+      options={sandpackOptions}
     >
+      <SandpackErrorObserver onErrorChange={onErrorChange} />
       <SandpackLayout style={{ height: "100%", background: "transparent", border: "none", borderRadius: 0 }}>
         {children}
       </SandpackLayout>

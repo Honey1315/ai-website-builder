@@ -1,45 +1,32 @@
 import { FileData } from "@/types/ai";
 
 export function extractCode(response: string): string {
-  // Trim the response to handle any surrounding whitespace
   const trimmed = response.trim();
 
-  // Handle single file with FILE markers — use same logic as extractMultipleFiles Strategy 1
   const fileMarkerPattern = /\/\/\s*FILE:\s*([^\n]+)\n([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
   const fileMarkerMatch = fileMarkerPattern.exec(trimmed);
   if (fileMarkerMatch) {
-    // console.log('extractCode: Detected FILE markers');
     let raw = fileMarkerMatch[2].trim();
-    // Remove trailing // END_FILE if present (as per SYSTEM_PROMPT)
     if (raw.endsWith('// END_FILE')) {
-      // console.log('extractCode: Removing trailing // END_FILE');
-      // Split into lines, remove the last line if it's exactly // END_FILE (trimmed)
       const lines = raw.split('\n');
-      if (lines.length > 0 && lines[lines.length-1].trim() === '// END_FILE') {
+      if (lines.length > 0 && lines[lines.length - 1].trim() === '// END_FILE') {
         lines.pop();
       }
       raw = lines.join('\n').trim();
     }
-    // If there is a code fence inside raw, extract ONLY the first code fence.
-    // This prevents trailing markdown/diffs from bleeding into the file content.
     const fenceMatch = raw.match(/```[\w]*\n([\s\S]*?)\n```/);
     const content = fenceMatch ? fenceMatch[1].trim() : raw;
-    // console.log('extractCode: Returning content from FILE markers:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
     return content;
   }
 
-  // Remove markdown code blocks — match any language label (jsx, tsx, css, html, json, etc.)
   let code = trimmed;
-
   if (code.startsWith("```")) {
-    // Match code blocks with any optional language specifier
     const match = code.match(/^```[\w]*\n?([\s\S]*?)\n?```$/);
     if (match) {
       code = match[1];
     }
   }
 
-  // If code looks like actual JS/JSX/TS code, return as-is
   if (
     code.includes("import ") ||
     code.includes("export ") ||
@@ -49,7 +36,6 @@ export function extractCode(response: string): string {
     return code.trim();
   }
 
-  // Otherwise try to extract from any markdown code fence
   const codeBlockMatch = code.match(/```[\w]*\n?([\s\S]*?)\n?```/);
   if (codeBlockMatch) {
     return codeBlockMatch[1].trim();
@@ -61,7 +47,6 @@ export function extractCode(response: string): string {
 export function extractMultipleFiles(response: string): FileData[] {
   const files: FileData[] = [];
 
-  // Strategy 1: // FILE: filename\n...content pattern
   const fileMarkerPattern = /\/\/\s*FILE:\s*([^\n]+)\n([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
   let match;
 
@@ -69,17 +54,14 @@ export function extractMultipleFiles(response: string): FileData[] {
     const filename = normalizeGeneratedFileName(match[1]);
     let raw = match[2].trim();
 
-    // Remove trailing // END_FILE if present
     if (raw.endsWith('// END_FILE')) {
       const lines = raw.split('\n');
-      if (lines.length > 0 && lines[lines.length-1].trim() === '// END_FILE') {
+      if (lines.length > 0 && lines[lines.length - 1].trim() === '// END_FILE') {
         lines.pop();
       }
       raw = lines.join('\n').trim();
     }
 
-    // If there is a code fence inside raw, extract ONLY the first code fence.
-    // This prevents trailing markdown/diffs from bleeding into the file content.
     const fenceMatch = raw.match(/```[\w]*\n([\s\S]*?)\n```/);
     const content = fenceMatch ? fenceMatch[1].trim() : raw;
 
@@ -92,7 +74,6 @@ export function extractMultipleFiles(response: string): FileData[] {
 
   if (files.length > 0) return files;
 
-  // Strategy 2: Named fenced blocks — ```jsx (App.jsx) or ```css (styles.css)
   const namedFencePattern = /```([\w]+)\s+\(([^)]+)\)\n([\s\S]*?)```/g;
   while ((match = namedFencePattern.exec(response)) !== null) {
     const filename = normalizeGeneratedFileName(match[2]);
@@ -106,8 +87,6 @@ export function extractMultipleFiles(response: string): FileData[] {
 
   if (files.length > 0) return files;
 
-  // Strategy 3: Multiple unnamed fenced blocks — split into separate files by language.
-  // Detect all fenced blocks in the response.
   const unnamedFencePattern = /```([\w]*)\n([\s\S]*?)```/g;
   const blocks: { lang: string; content: string }[] = [];
   while ((match = unnamedFencePattern.exec(response)) !== null) {
@@ -115,7 +94,6 @@ export function extractMultipleFiles(response: string): FileData[] {
   }
 
   if (blocks.length > 1) {
-    // Multiple blocks — assign sensible file names based on language
     const langCounters: Record<string, number> = {};
     for (const block of blocks) {
       const ext = langToExtension(block.lang);
@@ -125,7 +103,7 @@ export function extractMultipleFiles(response: string): FileData[] {
       if (ext === "jsx" || ext === "js") {
         name = count === 1 ? "src/App.jsx" : `src/components/Component${count}.jsx`;
       } else if (ext === "css") {
-        name = count === 1 ? "src/styles.css" : `src/styles${count}.css`;
+        name = "src/index.css";
       } else {
         name = count === 1 ? `file.${ext}` : `file${count}.${ext}`;
       }
@@ -138,8 +116,6 @@ export function extractMultipleFiles(response: string): FileData[] {
     return files;
   }
 
-  // Fallback: treat entire response as a single App.jsx — but only if it contains JS/JSX code
-  // Avoid dumping CSS or non-JS content into App.jsx
   const singleContent = extractCode(response);
   const looksLikeJS =
     singleContent.includes("import ") ||
@@ -162,15 +138,13 @@ export function extractMultipleFiles(response: string): FileData[] {
 export function extractFileStructure(response: string): string[] {
   const lines = response.split(/\r?\n/);
   const fileNames: string[] = [];
-  const fileRegex = /([\w\-./]+\.(?:jsx|tsx|js|ts|css|html|json))/i;
+  const fileRegex = /([\w\-./]+\.(?:jsx|tsx|js|ts|config\.js|html|css|json))/i;
 
   for (let line of lines) {
     line = line.trim();
     if (!line) continue;
 
-    // Remove bullets, numbers, and punctuation prefixes.
     line = line.replace(/^[-*+\d.)\s]+/, "").trim();
-
     const match = line.match(fileRegex);
     if (match) {
       const fileName = normalizeGeneratedFileName(match[1]);
@@ -193,11 +167,15 @@ function normalizeGeneratedFileName(fileName: string): string {
     .filter((part) => part && part !== "." && part !== "..")
     .join("/");
 
-  if (!normalizedName || normalizedName.startsWith("src/")) {
+  if (["index.html", "vite.config.js"].includes(normalizedName)) {
     return normalizedName;
   }
 
-  if (normalizedName === "App.jsx" || normalizedName === "styles.css") {
+  if (normalizedName.startsWith("src/")) {
+    return normalizedName;
+  }
+
+  if (normalizedName === "App.jsx" || normalizedName === "main.jsx" || normalizedName === "index.css") {
     return `src/${normalizedName}`;
   }
 
@@ -237,9 +215,7 @@ export function getLanguageFromFilename(filename: string): string {
 }
 
 export function validateCode(code: string): boolean {
-  // Basic validation - check for common JSX patterns
   const hasJSX = /<[A-Z]/.test(code) || /return\s*\(/.test(code);
   const hasExport = /export\s+(default\s+)?function|const\s+\w+\s*=/.test(code);
-
   return hasJSX || hasExport;
 }

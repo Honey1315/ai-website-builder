@@ -21,11 +21,74 @@ function getContractProps(manifest: ProjectManifest, componentName: string): str
   return manifest.components.find((component) => component.name === componentName)?.props;
 }
 
+export function resolveRelativePath(parentFile: string, importPath: string): string {
+  const cleanParent = parentFile.replace(/^\/+/, "");
+  const parts = cleanParent.split("/");
+  parts.pop(); // Remove parent filename
+
+  const segments = importPath.split("/");
+  for (const seg of segments) {
+    if (seg === "." || seg === "") continue;
+    if (seg === "..") {
+      parts.pop();
+    } else {
+      parts.push(seg);
+    }
+  }
+
+  return parts.join("/");
+}
+
+function doesProjectFileExist(targetPath: string, existingPaths: Set<string>): boolean {
+  const clean = targetPath.replace(/^\/+/, "");
+  if (existingPaths.has(clean) || existingPaths.has(`/${clean}`)) return true;
+
+  const extensions = [".jsx", ".js", ".tsx", ".ts", "/index.jsx", "/index.js", "/index.tsx", "/index.ts"];
+  for (const ext of extensions) {
+    if (existingPaths.has(clean + ext) || existingPaths.has(`/${clean}${ext}`)) return true;
+  }
+
+  // Base sandbox files are always provided
+  if (
+    clean === "src/index.css" ||
+    clean === "src/main.jsx" ||
+    clean === "index.html" ||
+    clean === "vite.config.js" ||
+    clean.endsWith(".css")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function validateContracts(
   manifest: ProjectManifest,
   metadataByFile: Map<string, FileMetadata>
 ): ValidationMismatch[] {
   const mismatches: ValidationMismatch[] = [];
+  const existingFileKeys = new Set(Array.from(metadataByFile.keys()));
+
+  // 1. Verify that all local relative imports point to existing project files
+  for (const [parentFile, metadata] of metadataByFile.entries()) {
+    if (metadata.localImports && metadata.localImports.length > 0) {
+      for (const localImport of metadata.localImports) {
+        const resolved = resolveRelativePath(parentFile, localImport.source);
+        if (!doesProjectFileExist(resolved, existingFileKeys)) {
+          const compName = localImport.names[0] || resolved.split("/").pop() || "Component";
+          mismatches.push({
+            type: "missing_dependency",
+            parentFile,
+            childFile: resolved,
+            component: compName,
+            expected: ["existing project file"],
+            actual: [`non-existent: ${localImport.source}`],
+            message: `${parentFile} imports '${localImport.source}', but this file does not exist in the project. Correct the import path to match an existing project file or remove the unused import.`,
+          });
+        }
+      }
+    }
+  }
 
   for (const component of manifest.components) {
     const filePath = findComponentFile(manifest, component.name);

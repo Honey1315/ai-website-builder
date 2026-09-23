@@ -1,17 +1,12 @@
 import OpenAI from "openai";
-
 import type { ModelProvider, ProviderOptions } from "@/types/ai";
 import { MODEL_CATALOG } from "@/utils/constants";
+import { isModelHealthy, tripModel, getUnhealthyModels } from "@/lib/circuitBreaker";
 
 export type { ModelProvider, ProviderOptions } from "@/types/ai";
 
 export const DEFAULT_NVIDIA_MODEL = MODEL_CATALOG.nvidia.defaultModel;
-export const MICROSOFT_PHI_INSTRUCT_MODEL = "microsoft/phi-4-mini-instruct";
-export const QWEN_QWEN3_NEXT_80B_A3B_INSTRUCT_MODEL = "qwen/qwen3-next-80b-a3b-instruct";
-export const OPENAI_GPT_OSS_120B_MODEL = "openai/gpt-oss-120b";
-export const  STEALTH_OX_ALPHA="stealth/ox-alpha";
 
-// Read lazily so env vars added after the server booted are still picked up.
 const getNvidiaApiKey = () => process.env.NVIDIA_API_KEY;
 const getOpenRouterApiKey = () => process.env.OPENROUTER_API_KEY;
 
@@ -28,11 +23,10 @@ export const getNVIDIAConfig = (): NVIDIAConfig => {
   if (!apiKey) {
     throw new Error("NVIDIA_API_KEY is not set");
   }
-
   return {
     apiKey,
-    model: OPENAI_GPT_OSS_120B_MODEL,
-    temperature: 0.7,
+    model: DEFAULT_NVIDIA_MODEL,
+    temperature: 0.1,
     maxTokens: 4096,
     top_p: 0.95,
   };
@@ -62,61 +56,240 @@ function getOpenRouterClient(): OpenAI {
 
 /**
  * Validates raw provider/model input coming from API request bodies.
- * Falls back to the default provider when the value is unknown.
+ * Restricts models to the valid catalog and falls back to defaultModel.
  */
 export function resolveProviderOptions(input: {
   provider?: unknown;
   model?: unknown;
 }): ProviderOptions {
   const provider: ModelProvider =
-    input.provider === "openrouter" || input.provider === "nvidia"
+    input.provider === "openrouter" || input.provider === "nvidia" || input.provider === "gemini"
       ? input.provider
-      : "nvidia";
+      : process.env.GEMINI_API_KEY ? "gemini" : "openrouter";
+
+  const catalog = MODEL_CATALOG[provider];
+  const requestedModel =
+    typeof input.model === "string" && input.model.trim().length > 0
+      ? input.model.trim()
+      : undefined;
+
+  const model =
+    requestedModel && catalog.models.includes(requestedModel)
+      ? requestedModel
+      : catalog.defaultModel;
 
   return {
     provider,
-    model:
-      typeof input.model === "string" && input.model.trim().length > 0
-        ? input.model
-        : undefined,
+    model,
   };
 }
 
-type ChatMessage = { role: "user"; content: string };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/**
+ * Resolves the ordered candidate models for a provider, filtered against active
+ * circuit-breaker cooldown windows.
+ *
+ * Emergency fallback: if every model is in cooldown, selects the one closest
+ * to recovery so the pipeline never dead-ends with an empty list.
+ */
+export function resolveHealthyCandidates(
+  provider: ModelProvider,
+  preferredModel?: string
+): string[] {
+  const catalog = MODEL_CATALOG[provider];
+  const primary =
+    preferredModel && catalog.models.includes(preferredModel)
+      ? preferredModel
+      : catalog.defaultModel;
+
+  const ordered = [primary, ...catalog.models.filter((m) => m !== primary)];
+  const healthy = ordered.filter(isModelHealthy);
+
+  if (healthy.length > 0) return healthy;
+
+  // Emergency: all tripped -> pick the one closest to recovering
+  const unhealthy = getUnhealthyModels().filter(({ modelId }) =>
+    catalog.models.includes(modelId)
+  );
+
+  const emergency =
+    unhealthy.length > 0
+      ? unhealthy.sort((a, b) => a.remainingMs - b.remainingMs)[0].modelId
+      : primary;
+
+  console.warn(
+    `[OpenRouter] All ${provider} models are in cooldown. Emergency fallback to "${emergency}".`
+  );
+  return [emergency];
+}
+
+/**
+ * Safely extracts text content from an OpenAI-compatible completion response.
+ * Returns null if the payload is empty or malformed.
+ */
+export function extractResponseContent(
+  response: OpenAI.Chat.ChatCompletion,
+  modelId: string
+): string | null {
+  const content = response?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.trim() === "") {
+    console.warn(`[OpenRouter] Model "${modelId}" returned an empty or malformed payload.`);
+    return null;
+  }
+  return content;
+}
+
+/**
+ * Core unified AI call function:
+ * 1. Filters candidates through the in-memory circuit breaker.
+ * 2. Leverages OpenRouter native models edge-gateway routing in a single HTTP call.
+ * 3. Safely extracts response content and trips circuit breaker on empty payload or errors.
+ * 4. Falls back to sequential iteration for NVIDIA NIM.
+ */
 export async function callOpenRouter(
   messages: ChatMessage[],
   options: ProviderOptions = {}
 ): Promise<string> {
-  if (options.provider === "openrouter") {
+  const provider = options.provider || "openrouter";
+  const temperature = options.temperature ?? 0.1;
+  const candidates = resolveHealthyCandidates(provider, options.model);
+
+  // -------------------------------------------------------------
+  // OpenRouter path - Native Edge Gateway Multi-Model Routing
+  // -------------------------------------------------------------
+  if (provider === "openrouter") {
     if (!getOpenRouterApiKey()) {
-      throw new Error(
-        "OPENROUTER_API_KEY is not set — add it to .env.local and restart the dev server"
-      );
+      throw new Error("OPENROUTER_API_KEY is not set - add it to .env.local and restart the dev server");
     }
 
-    const response = await getOpenRouterClient().chat.completions.create({
-      model: options.model || MODEL_CATALOG.openrouter.defaultModel,
-      messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      top_p: 0.95,
-      stream: false,
-    });
+    const [primary, ...fallbacks] = candidates;
 
-    return response.choices[0].message.content || "";
+    try {
+      // Pass primary to 'model' and fallbacks to 'models' with provider.allow_fallbacks
+      const requestPayload: any = {
+        model: primary,
+        messages,
+        temperature,
+        max_tokens: 8192,
+        top_p: 0.95,
+        stream: false,
+      };
+
+      if (fallbacks.length > 0) {
+        requestPayload.models = [primary, ...fallbacks].slice(0, 3);
+        requestPayload.provider = { allow_fallbacks: true };
+      }
+
+      const response = await getOpenRouterClient().chat.completions.create(requestPayload);
+
+      // Detect which model actually served the request
+      const servedBy: string = (response as any)?.model || primary;
+      if (servedBy !== primary) {
+        console.info(
+          `[OpenRouter] Primary model "${primary}" failed upstream; served by fallback "${servedBy}". Tripping primary.`
+        );
+        tripModel(primary);
+      }
+
+      const content = extractResponseContent(response, servedBy);
+      if (content === null) {
+        tripModel(servedBy);
+        // Fallback sequentially through remaining candidates
+        return await openRouterFallbackLoop(
+          messages,
+          temperature,
+          candidates.filter((m) => m !== servedBy)
+        );
+      }
+
+      return content;
+    } catch (err: any) {
+      console.warn(`[OpenRouter] Gateway request failed for "${primary}":`, err?.message || err);
+      tripModel(primary, err);
+
+      // Fallback sequentially to remaining healthy candidates if any
+      const remaining = candidates.slice(1).filter(isModelHealthy);
+      if (remaining.length > 0) {
+        return await openRouterFallbackLoop(messages, temperature, remaining);
+      }
+
+      throw err;
+    }
   }
 
+  // -------------------------------------------------------------
+  // NVIDIA NIM path - Sequential fallback with Circuit Breaker
+  // -------------------------------------------------------------
   const config = getNVIDIAConfig();
+  let lastError: unknown;
 
-  const response = await getNvidiaClient().chat.completions.create({
-    model: options.model || config.model,
-    messages,
-    temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    top_p: config.top_p,
-    stream: false,
-  });
+  for (const candidate of candidates) {
+    if (!isModelHealthy(candidate)) continue;
 
-  return response.choices[0].message.content || "";
+    try {
+      const response = await getNvidiaClient().chat.completions.create({
+        model: candidate,
+        messages,
+        temperature,
+        max_tokens: config.maxTokens,
+        top_p: config.top_p,
+        stream: false,
+      });
+
+      const content = extractResponseContent(response, candidate);
+      if (content === null) {
+        tripModel(candidate);
+        continue;
+      }
+
+      return content;
+    } catch (err) {
+      console.warn(`[NVIDIA] Model "${candidate}" failed:`, err);
+      tripModel(candidate, err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All NVIDIA models failed or are currently in cooldown");
+}
+
+/**
+ * Sequential fallback loop for OpenRouter when edge-gateway batch partially failed or returned empty payload.
+ */
+async function openRouterFallbackLoop(
+  messages: ChatMessage[],
+  temperature: number,
+  candidates: string[]
+): Promise<string> {
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    if (!isModelHealthy(candidate)) continue;
+
+    try {
+      const response = await getOpenRouterClient().chat.completions.create({
+        model: candidate,
+        messages,
+        temperature,
+        max_tokens: 8192,
+        top_p: 0.95,
+        stream: false,
+      });
+
+      const content = extractResponseContent(response, candidate);
+      if (content === null) {
+        tripModel(candidate);
+        continue;
+      }
+
+      return content;
+    } catch (err) {
+      console.warn(`[OpenRouter] Fallback model "${candidate}" failed:`, err);
+      tripModel(candidate, err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All OpenRouter fallback models exhausted or in cooldown");
 }

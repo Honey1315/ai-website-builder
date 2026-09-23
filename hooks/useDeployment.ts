@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { FileData } from "@/types/ai";
 import { DeployConfig, DeployState, DeploymentStatus } from "@/types/deploy";
 
@@ -9,6 +9,17 @@ export function useDeployment() {
   const [vercelUrl, setVercelUrl] = useState<string | null>(null);
   
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Ensure the polling interval is always cleared when the component unmounts
+  // mid-deployment, preventing phantom state updates and wasted Vercel API calls.
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
 
   const reset = useCallback(() => {
     setState("idle");
@@ -32,43 +43,68 @@ export function useDeployment() {
     }
   }, [state]);
 
-  const deploy = useCallback(async (config: DeployConfig, files: FileData[], projectName: string) => {
+  const deploy = useCallback(async (
+    config: DeployConfig,
+    files: FileData[],
+    projectName: string,
+    projectId?: string | null
+  ) => {
     reset();
     
     try {
       // 1. Push to GitHub
       setState("pushing_github");
+      const githubHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (config.githubToken) {
+        githubHeaders["x-github-token"] = config.githubToken;
+      }
+
       const githubRes = await fetch("/api/deploy/github", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-github-token": config.githubToken,
-        },
+        headers: githubHeaders,
         body: JSON.stringify({
           projectName,
           files,
           repoName: config.repoName,
+          tokenId: config.githubTokenId,
         }),
       });
 
       const githubData = await githubRes.json();
       if (!githubRes.ok) throw new Error(githubData.error || "GitHub deploy failed");
       
-      setGithubUrl(githubData.repoUrl);
+      const createdRepoUrl = githubData.repoUrl;
+      setGithubUrl(createdRepoUrl);
+
+      // Persist GitHub link to project in DB if projectId is present
+      if (projectId && createdRepoUrl) {
+        fetch("/api/project/save", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: projectId, github_link: createdRepoUrl }),
+        }).catch((err) => console.error("Failed to persist github_link:", err));
+      }
 
       // 2. Create Vercel Project & Deploy
       setState("creating_vercel");
+      const vercelHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (config.vercelToken) {
+        vercelHeaders["x-vercel-token"] = config.vercelToken;
+      }
+
       const vercelRes = await fetch("/api/deploy/vercel", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-vercel-token": config.vercelToken,
-        },
+        headers: vercelHeaders,
         body: JSON.stringify({
-          projectName,
+          projectName: config.repoName || githubData.repoName || projectName,
           repoFullName: githubData.repoFullName,
           repoId: githubData.repoId,
-          framework: "create-react-app", // Can be dynamic based on project manifest later
+          framework: "vite", // Can be dynamic based on project manifest later
+          tokenId: config.vercelTokenId,
         }),
       });
 
@@ -83,10 +119,16 @@ export function useDeployment() {
       
       pollingRef.current = setInterval(async () => {
         try {
+          const statusHeaders: Record<string, string> = {};
+          if (config.vercelToken) {
+            statusHeaders["x-vercel-token"] = config.vercelToken;
+          }
+          if (config.vercelTokenId) {
+            statusHeaders["x-vercel-token-id"] = config.vercelTokenId;
+          }
+
           const statusRes = await fetch(`/api/deploy/vercel/status?deploymentId=${deploymentId}`, {
-            headers: {
-              "x-vercel-token": config.vercelToken,
-            },
+            headers: statusHeaders,
           });
           
           if (!statusRes.ok) {
@@ -98,8 +140,18 @@ export function useDeployment() {
 
           if (statusData.status === "READY") {
             if (pollingRef.current) clearInterval(pollingRef.current);
-            setVercelUrl(statusData.url); // Set to the specific deployment URL
+            const finalLiveUrl = statusData.url || vercelData.projectUrl;
+            setVercelUrl(finalLiveUrl);
             setState("ready");
+
+            // Persist Vercel live link to project in DB once build successfully finishes
+            if (projectId && finalLiveUrl) {
+              fetch("/api/project/save", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: projectId, vercel_link: finalLiveUrl }),
+              }).catch((err) => console.error("Failed to persist vercel_link:", err));
+            }
           } else if (statusData.status === "ERROR" || statusData.status === "CANCELED") {
             if (pollingRef.current) clearInterval(pollingRef.current);
             setError(`Deployment ${statusData.status}: ${statusData.error || "Unknown error"}`);

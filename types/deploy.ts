@@ -1,6 +1,8 @@
 export interface DeployConfig {
-  githubToken: string;
-  vercelToken: string;
+  githubToken?: string;
+  vercelToken?: string;
+  githubTokenId?: string;
+  vercelTokenId?: string;
   repoName: string;
 }
 

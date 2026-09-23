@@ -3,199 +3,591 @@
 import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/UI/Button";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { signInWithGoogle } from "@/lib/auth-client";
 
 export default function Home() {
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"pipeline" | "files" | "preview" | "deploy">("pipeline");
+  const [selectedFile, setSelectedFile] = useState<string>("App.jsx");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+  const [appTheme, setAppTheme] = useState<"dark" | "teal">("dark");
+
+  const fileCodeSnippets: Record<string, string> = {
+    "App.jsx": `import React, { useState } from "react";
+import Navbar from "./components/Navbar";
+import HeroSection from "./components/HeroSection";
+import PricingGrid from "./components/PricingGrid";
+
+export default function App() {
+  const [userState, setUserState] = useState({ plan: "pro", active: true });
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <Navbar plan={userState.plan} />
+      <HeroSection />
+      <PricingGrid onSelect={(plan) => setUserState({ ...userState, plan })} />
+    </div>
+  );
+}`,
+    "PricingGrid.jsx": `import React from "react";
+
+export default function PricingGrid({ onSelect }) {
+  const plans = [
+    { name: "Starter", price: "$0", features: ["1 Project", "Community Support"] },
+    { name: "Pro Edge", price: "$29", featured: true, features: ["Unlimited Apps", "1-Click Deploy", "Auto-Fix"] },
+    { name: "Enterprise", price: "$99", features: ["Custom Domains", "Team Workspaces", "SLA"] },
+  ];
 
   return (
-    <div className="min-h-screen bg-secondary-900 text-secondary-50 font-sans overflow-x-hidden">
-      {/* 
-        Note: Navbar is kept as requested to preserve functionality. 
-        Assuming it inherits current text colors or has a transparent mode. 
-      */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+      {plans.map((p) => (
+        <div key={p.name} className={\`p-6 border \${p.featured ? "border-teal-400 bg-teal-950/20" : "border-slate-800 bg-slate-900"}\`}>
+          <h3 className="text-xl font-bold">{p.name}</h3>
+          <p className="text-3xl font-mono mt-2">{p.price}<span className="text-xs text-slate-400">/mo</span></p>
+          <button onClick={() => onSelect(p.name)} className="mt-4 w-full py-2 bg-teal-500 text-slate-950 font-bold hover:bg-teal-400">
+            Select Plan
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}`,
+    "Navbar.jsx": `import React from "react";
+
+export default function Navbar({ plan }) {
+  return (
+    <nav className="border-b border-slate-800 px-6 py-3.5 flex justify-between items-center">
+      <div className="flex items-center gap-2 font-bold tracking-wider text-teal-400">
+        <span className="w-2 h-2 bg-teal-400 animate-pulse"></span>
+        SaaS.APP
+      </div>
+      <div className="flex items-center gap-4 text-xs font-mono">
+        <span className="px-2 py-0.5 border border-teal-500/40 text-teal-300">PLAN: {plan.toUpperCase()}</span>
+        <button className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white">Dashboard</button>
+      </div>
+    </nav>
+  );
+}`,
+    "index.css": `@import "tailwindcss";
+
+@theme {
+  --color-brand: #33b5aa;
+  --font-display: "Plus Jakarta Sans", sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #090d16;
+}`,
+    "vite.config.js": `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react(),'lucide-react'],
+  server: {
+    port: 3000,
+    host: true,
+  },
+});`,
+    "package.json": `{
+  "name": "ai-generated-react-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.475.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.1.0",
+    "tailwindcss": "^4.0.0"
+  }
+}`,
+  };
+
+  return (
+    <div className="min-h-screen bg-[#05080c] text-secondary-50 font-sans overflow-x-hidden selection:bg-primary-500/20 selection:text-primary-300">
       <Navbar />
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 py-24 sm:py-32 relative">
-        {/* Subtle background glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-primary-900/20 blur-[120px] rounded-full pointer-events-none"></div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center relative z-10">
-          {/* Left Content */}
-          <div className="space-y-10">
-            <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 text-[10px] md:text-xs font-mono uppercase tracking-[0.2em] text-primary-400">
-                <span className="w-2 h-2 bg-primary-400 block"></span>
-                AI-Powered Platform
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-8 sm:pt-16 md:pt-20 pb-16 sm:pb-24 relative">
+        {/* Ambient atmospheric glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] sm:w-[500px] lg:w-[800px] h-[280px] sm:h-[400px] bg-primary-900/15 blur-[120px] sm:blur-[160px] rounded-full pointer-events-none"></div>
+        <div className="absolute top-8 right-4 sm:right-10 w-32 sm:w-48 h-32 sm:h-48 bg-primary-400/5 blur-[80px] rounded-full pointer-events-none"></div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-12 lg:gap-14 items-center relative z-10">
+          {/* Left Content Column */}
+          <div className="lg:col-span-7 space-y-6 sm:space-y-8">
+            <div className="space-y-4 sm:space-y-6">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-primary-500/30 bg-primary-500/5 text-[10px] sm:text-xs font-mono uppercase tracking-[0.18em] text-primary-400">
+                <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
+                <span>SYS_V3.0 // AUTONOMOUS REACT ENGINE</span>
               </div>
-              
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-light text-white leading-[1.1] tracking-tight">
-                Create Stunning <br />
-                Websites with <span className="font-medium text-primary-400">AI.</span>
+
+              {/* Main Headline */}
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-light text-white leading-[1.12] tracking-tight break-words">
+                Prompt to <br />
+                Production-Ready <br />
+                <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-teal-300 to-primary-200">
+                  Full React Apps.
+                </span>
               </h1>
-              
-              <p className="text-lg md:text-xl text-secondary-400 font-light leading-relaxed max-w-xl">
-                Transform your ideas into beautiful, functional websites in seconds. 
-                Just describe what you want, and our AI creates production-ready React code.
+
+              {/* Subtitle */}
+              <p className="text-xs sm:text-base md:text-lg text-secondary-400 font-light leading-relaxed max-w-2xl">
+                Transform natural language prompts into modular, multi-file Vite + React + Tailwind applications in seconds.
+                Test in an in-browser live Sandpack sandbox, resolve glitches with self-healing AI error diagnostics, and deploy to GitHub and Vercel with a single click.
               </p>
             </div>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Link href="/builder">
-                <Button 
-                  variant="primary" 
-                  size="lg" 
-                  className="w-full sm:w-auto bg-primary-500 hover:bg-primary-400 text-secondary-900 font-semibold rounded-none px-8 py-4 uppercase tracking-wide text-sm transition-all"
+            {/* CTA Action Cluster */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1">
+              <Link href="/builder" className="w-full sm:w-auto">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="w-full sm:w-auto bg-primary-500 hover:bg-primary-400 text-secondary-900 font-bold rounded-none px-6 sm:px-8 py-3.5 sm:py-4 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-lg shadow-primary-500/10"
                 >
-                  Start Building ↗
+                  Launch Builder _
+                  <span className="text-secondary-900 font-bold">→</span>
                 </Button>
               </Link>
-              <Link href="/projects">
-                <Button 
-                  variant="secondary" 
-                  size="lg" 
-                  className="w-full sm:w-auto bg-transparent border border-secondary-700 hover:border-primary-400 text-white rounded-none px-8 py-4 uppercase tracking-wide text-sm transition-all"
+              <Link href="/projects" className="w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="w-full sm:w-auto bg-transparent border border-secondary-700 hover:border-primary-400 text-white rounded-none px-6 sm:px-8 py-3.5 sm:py-4 uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  View Projects
+                  Workspace Projects ↗
                 </Button>
               </Link>
             </div>
 
-            {/* Stats - Redesigned to match the reference image's stat blocks */}
-            <div className="grid grid-cols-3 gap-8 pt-12 border-t border-secondary-800 mt-12">
-              <div>
-                <div className="text-4xl font-display font-light text-white mb-2">∞</div>
-                <div className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest">Possibilities</div>
+            {/* Performance & Spec Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-secondary-800/80">
+              <div className="p-2 sm:p-0">
+                <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
+                  &lt; 3<span className="text-primary-400 text-base sm:text-lg">s</span>
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
+                  Sandpack HMR Live
+                </div>
               </div>
-              <div>
-                <div className="text-4xl font-display font-light text-white mb-2">99<span className="text-primary-400 text-2xl">%</span></div>
-                <div className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest">Lightning Fast</div>
+              <div className="p-2 sm:p-0">
+                <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
+                  Tailwind
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
+                  V3 Vite Stack
+                </div>
               </div>
-              <div>
-                <div className="text-4xl font-display font-light text-white mb-2">01</div>
-                <div className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest">Beautiful Design</div>
+              <div className="p-2 sm:p-0">
+                <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
+                  1-Click
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
+                  GitHub & Vercel
+                </div>
+              </div>
+              <div className="p-2 sm:p-0">
+                <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
+                  Dual Engine
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
+                  NVIDIA & OpenRouter
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right - Showcase (Technical Data Viz Aesthetic) */}
-          <div className="relative w-full aspect-square md:aspect-auto md:h-[600px] border border-secondary-800 bg-secondary-900/50 p-8 flex flex-col">
-            {/* Top decorative bar */}
-            <div className="flex justify-between items-center border-b border-secondary-800 pb-4 mb-8">
-              <div className="flex gap-2">
-                <div className="w-2 h-2 bg-secondary-600"></div>
-                <div className="w-2 h-2 bg-secondary-600"></div>
-                <div className="w-2 h-2 bg-primary-400"></div>
-              </div>
-              <div className="text-[10px] font-mono text-secondary-500 tracking-widest">SYSTEM_READY</div>
-            </div>
+          {/* Right Showcase Column - Interactive System Monitor */}
+          <div className="lg:col-span-5 w-full">
+            <div className="relative border border-secondary-800 bg-[#0a0f16]/95 backdrop-blur-md shadow-2xl p-3.5 sm:p-5 flex flex-col gap-4 overflow-hidden">
+              {/* Corner tech accent */}
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-60 pointer-events-none"></div>
 
-            <div className="flex-grow flex flex-col justify-center space-y-8">
-              <div className="space-y-3">
-                <div className="text-xs font-mono text-primary-400 flex items-center gap-3">
-                  <span className="text-secondary-600">&gt;</span> Input parameters
+              {/* Terminal Window Chrome */}
+              <div className="flex justify-between items-center border-b border-secondary-800/80 pb-2.5">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="w-2 sm:w-2.5 h-2 sm:h-2.5 bg-danger-500/80"></div>
+                  <div className="w-2 sm:w-2.5 h-2 sm:h-2.5 bg-yellow-500/80"></div>
+                  <div className="w-2 sm:w-2.5 h-2 sm:h-2.5 bg-primary-400"></div>
+                  <span className="text-[9px] sm:text-[10px] font-mono text-secondary-400 uppercase tracking-wider ml-1.5 sm:ml-2">
+                    SYS_MONITOR // SANDBOX
+                  </span>
                 </div>
-                <div className="p-4 border border-secondary-800 bg-secondary-900 text-secondary-300 font-sans text-sm leading-relaxed border-l-2 border-l-primary-500">
-                  "Create a modern e-commerce site with product cards and a shopping cart"
+                <div className="flex items-center gap-1.5 font-mono text-[9px] text-primary-400 uppercase">
+                  <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-pulse"></span>
+                  ONLINE
                 </div>
               </div>
 
-              <div className="space-y-4 pt-4">
-                <div className="text-[10px] font-mono text-secondary-600 uppercase tracking-widest border-b border-secondary-800 pb-2">Execution Log</div>
-                <div className="space-y-2">
-                  <div className="text-xs font-mono text-secondary-400 flex justify-between">
-                    <span>[SYS] Code generation</span>
-                    <span className="text-primary-400">SUCCESS</span>
+              {/* Tab Selector (Horizontally scrollable on small mobile) */}
+              <div className="flex overflow-x-auto no-scrollbar gap-1 border-b border-secondary-800 text-[10px] font-mono uppercase tracking-wider pb-1">
+                <button
+                  onClick={() => setActiveTab("pipeline")}
+                  className={`py-1 px-2.5 sm:px-3 whitespace-nowrap transition-colors border-b-2 cursor-pointer ${activeTab === "pipeline" ? "border-primary-400 text-primary-300 font-bold" : "border-transparent text-secondary-500 hover:text-secondary-300"}`}
+                >
+                  Pipeline
+                </button>
+                <button
+                  onClick={() => setActiveTab("files")}
+                  className={`py-1 px-2.5 sm:px-3 whitespace-nowrap transition-colors border-b-2 cursor-pointer ${activeTab === "files" ? "border-primary-400 text-primary-300 font-bold" : "border-transparent text-secondary-500 hover:text-secondary-300"}`}
+                >
+                  File Tree
+                </button>
+                <button
+                  onClick={() => setActiveTab("preview")}
+                  className={`py-1 px-2.5 sm:px-3 whitespace-nowrap transition-colors border-b-2 cursor-pointer ${activeTab === "preview" ? "border-primary-400 text-primary-300 font-bold" : "border-transparent text-secondary-500 hover:text-secondary-300"}`}
+                >
+                  Live Preview
+                </button>
+                <button
+                  onClick={() => setActiveTab("deploy")}
+                  className={`py-1 px-2.5 sm:px-3 whitespace-nowrap transition-colors border-b-2 cursor-pointer ${activeTab === "deploy" ? "border-primary-400 text-primary-300 font-bold" : "border-transparent text-secondary-500 hover:text-secondary-300"}`}
+                >
+                  Deployment
+                </button>
+              </div>
+
+              {/* Tab 1: Pipeline Telemetry */}
+              {activeTab === "pipeline" && (
+                <div className="space-y-3.5 py-1">
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] sm:text-[11px] font-mono text-primary-400 flex items-center gap-1.5">
+                      <span className="text-secondary-600">&gt;</span> Prompt Input
+                    </div>
+                    <div className="p-2.5 sm:p-3 bg-[#05080c] border border-secondary-800 text-secondary-300 font-mono text-[11px] sm:text-xs leading-relaxed border-l-2 border-l-primary-500 break-words">
+                      &quot;Create a high-converting SaaS billing &amp; analytics dashboard with dark theme, pricing tiers, and interactive charts&quot;
+                    </div>
                   </div>
-                  <div className="text-xs font-mono text-secondary-400 flex justify-between">
-                    <span>[SYS] Live preview compilation</span>
-                    <span className="text-primary-400">SUCCESS</span>
-                  </div>
-                  <div className="text-xs font-mono text-secondary-400 flex justify-between">
-                    <span>[SYS] Editable state</span>
-                    <span className="text-primary-400">READY</span>
+
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-wider border-b border-secondary-800/60 pb-1 flex justify-between">
+                      <span>Telemetry Feed</span>
+                      <span className="text-primary-400 font-bold">STATUS: 200 OK</span>
+                    </div>
+                    <div className="space-y-1.5 font-mono text-[10px] sm:text-[11px]">
+                      <div className="flex justify-between items-center text-secondary-400">
+                        <span className="truncate pr-2">[1] Model Engine: NVIDIA Nemotron-3</span>
+                        <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ENGAGED</span>
+                      </div>
+                      <div className="flex justify-between items-center text-secondary-400">
+                        <span className="truncate pr-2">[2] Contract Architecture &amp; Scaffolding</span>
+                        <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">5 FILES</span>
+                      </div>
+                      <div className="flex justify-between items-center text-secondary-400">
+                        <span className="truncate pr-2">[3] Sandpack Nodebox In-Browser HMR</span>
+                        <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ACTIVE</span>
+                      </div>
+                      <div className="flex justify-between items-center text-secondary-400">
+                        <span className="truncate pr-2">[4] Frame Boundary Error Interceptor</span>
+                        <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ARMED</span>
+                      </div>
+                      <div className="flex justify-between items-center text-secondary-400">
+                        <span className="truncate pr-2">[5] 1-Click Git &amp; Vercel Edge Pipeline</span>
+                        <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">READY</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
+
+              {/* Tab 2: Interactive File Tree Explorer */}
+              {activeTab === "files" && (
+                <div className="space-y-3 py-1 font-mono text-xs">
+                  <div className="flex justify-between items-center text-[10px] text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800">
+                    <span>Select File to Preview</span>
+                    <span className="text-primary-400">{selectedFile}</span>
+                  </div>
+
+                  {/* Clickable File Chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.keys(fileCodeSnippets).map((filename) => (
+                      <button
+                        key={filename}
+                        onClick={() => setSelectedFile(filename)}
+                        className={`text-[10px] px-2 py-1 border transition-all cursor-pointer ${selectedFile === filename
+                          ? "border-primary-400 bg-primary-500/10 text-primary-300 font-bold"
+                          : "border-secondary-800 bg-[#05080c] text-secondary-400 hover:border-secondary-700"
+                          }`}
+                      >
+                        {filename.endsWith(".jsx") ? "📄 " : filename.endsWith(".css") ? "🎨 " : "⚙️ "}
+                        {filename}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Code Viewer */}
+                  <div className="bg-[#05080c] border border-secondary-800 p-2.5 max-h-48 overflow-y-auto overflow-x-auto text-[10px] text-secondary-300 leading-relaxed font-mono select-text">
+                    <pre>
+                      <code>{fileCodeSnippets[selectedFile]}</code>
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Interactive Mini App Preview */}
+              {activeTab === "preview" && (
+                <div className="space-y-3 py-1">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800">
+                    <span>Sandpack Sandbox Output</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setAppTheme(appTheme === "dark" ? "teal" : "dark")}
+                        className="text-[9px] px-1.5 py-0.5 border border-secondary-700 text-secondary-400 hover:text-primary-300 cursor-pointer"
+                      >
+                        Theme: {appTheme.toUpperCase()}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mini Interactive App Canvas */}
+                  <div className={`p-3.5 border rounded-none transition-colors ${appTheme === "dark"
+                    ? "bg-[#04060a] border-secondary-800 text-white"
+                    : "bg-[#071318] border-primary-800/60 text-teal-100"
+                    }`}>
+                    <div className="flex justify-between items-center pb-2.5 border-b border-secondary-800/60 text-[11px]">
+                      <div className="font-bold flex items-center gap-1.5 text-primary-400">
+                        <span className="w-1.5 h-1.5 bg-primary-400 rounded-full animate-ping"></span>
+                        CloudMetrics
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setBillingCycle("monthly")}
+                          className={`px-1.5 py-0.5 text-[9px] font-mono transition-colors cursor-pointer ${billingCycle === "monthly" ? "bg-primary-500 text-secondary-950 font-bold" : "text-secondary-400"}`}
+                        >
+                          Mo
+                        </button>
+                        <button
+                          onClick={() => setBillingCycle("yearly")}
+                          className={`px-1.5 py-0.5 text-[9px] font-mono transition-colors cursor-pointer ${billingCycle === "yearly" ? "bg-primary-500 text-secondary-950 font-bold" : "text-secondary-400"}`}
+                        >
+                          Yr (-20%)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 my-2.5">
+                      <div className="p-2 border border-secondary-800 bg-[#090f17]">
+                        <div className="text-[9px] text-secondary-500 uppercase font-mono">Total ARR</div>
+                        <div className="text-sm font-mono font-bold text-white mt-0.5">
+                          {billingCycle === "monthly" ? "$24,580" : "$294,960"}
+                        </div>
+                      </div>
+                      <div className="p-2 border border-secondary-800 bg-[#090f17]">
+                        <div className="text-[9px] text-secondary-500 uppercase font-mono">Conversion</div>
+                        <div className="text-sm font-mono font-bold text-primary-400 mt-0.5">4.82% ↑</div>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-secondary-400 flex items-center justify-between pt-1">
+                      <span className="font-mono text-[9px] text-secondary-500">Nodebox Virtual Vite Active</span>
+                      <span className="text-primary-400 font-mono text-[9px]">Responsive 100%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Cloud Deployment */}
+              {activeTab === "deploy" && (
+                <div className="space-y-3 py-1 font-mono">
+                  <div className="text-[10px] text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800 flex justify-between">
+                    <span>Cloud Deployment Pipeline</span>
+                    <span className="text-primary-400">READY (Edge)</span>
+                  </div>
+                  <div className="p-2.5 sm:p-3 bg-[#05080c] border border-secondary-800 space-y-2 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-secondary-500 text-[11px]">GitHub Repo:</span>
+                      <span className="text-primary-400 text-[11px] truncate max-w-[170px] sm:max-w-none">
+                        github.com/user/saas-dashboard
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-secondary-500 text-[11px]">Vercel Edge:</span>
+                      <span className="text-primary-400 text-[11px] font-bold">200 OK (Instant)</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-secondary-500 text-[11px]">Database Sync:</span>
+                      <span className="text-secondary-300 text-[11px]">Auto-saved to Supabase</span>
+                    </div>
+                    <div className="pt-2 border-t border-secondary-800/80 flex items-center justify-between">
+                      <span className="text-[9px] sm:text-[10px] text-secondary-500 uppercase">Live URL:</span>
+                      <a
+                        href="/builder"
+                        className="text-primary-300 text-xs underline hover:text-primary-200 transition-colors flex items-center gap-1"
+                      >
+                        saas-dashboard.vercel.app ↗
+                      </a>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-secondary-500 leading-relaxed">
+                    Auto-saves your project before deploying. Live URLs and repository links are permanently preserved in your workspace dashboard.
+                  </div>
+                </div>
+              )}
+
+              {/* Status bar */}
+              <div className="border-t border-secondary-800/80 pt-2.5 flex items-center justify-between text-[9px] sm:text-[10px] font-mono text-secondary-500">
+                <span>VITE + REACT + TAILWIND V3</span>
+                <span className="text-primary-400">AUTO_HEALING_ACTIVE</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Decorative Ticker Tape (Inspired by the reference image) */}
-      <div className="w-full border-y border-secondary-800 bg-secondary-900/80 py-4 overflow-hidden flex items-center">
-        <div className="flex whitespace-nowrap text-sm font-mono tracking-[0.3em] text-secondary-500 w-full justify-around">
-          <span>AI-NATIVE <span className="text-primary-400 mx-4">+</span></span>
-          <span>PRODUCTION-READY <span className="text-primary-400 mx-4">+</span></span>
-          <span>SEAMLESS INTEGRATION <span className="text-primary-400 mx-4">+</span></span>
-          <span className="hidden md:inline">DEVELOPER FIRST <span className="text-primary-400 mx-4">+</span></span>
+      {/* Infinite Scrolling Ticker Tape Marquee */}
+      <div className="w-full border-y border-secondary-800 bg-[#070c12] py-2.5 sm:py-3 overflow-hidden">
+        <div className="animate-marquee whitespace-nowrap text-[10px] sm:text-xs font-mono uppercase tracking-[0.22em] text-secondary-400">
+          <span className="mx-4 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-primary-400"></span> NVIDIA NIM &amp; OPENROUTER ENGINES
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> MULTI-FILE REACT ARCHITECTURE
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> SANDPACK IN-BROWSER SANDBOX
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> SELF-HEALING AI ERROR DIAGNOSTICS
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> 1-CLICK VERCEL &amp; GITHUB DEPLOYMENT
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> STANDALONE NPM ZIP EXPORT
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> SUPABASE PERSISTENT WORKSPACES
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-primary-400"></span> NVIDIA NIM &amp; OPENROUTER ENGINES
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> MULTI-FILE REACT ARCHITECTURE
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> SANDPACK IN-BROWSER SANDBOX
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> SELF-HEALING AI ERROR DIAGNOSTICS
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> 1-CLICK VERCEL &amp; GITHUB DEPLOYMENT
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> STANDALONE NPM ZIP EXPORT
+          </span>
+          <span className="mx-4 flex items-center gap-2">
+            <span>+</span> SUPABASE PERSISTENT WORKSPACES
+          </span>
         </div>
       </div>
 
-      {/* Features Section */}
-      <section className="py-24 border-b border-secondary-800">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="mb-16">
-            <h2 className="text-3xl md:text-5xl font-display font-light text-white mb-4 tracking-tight">
-              Globally Recognized <br />
-              <span className="text-primary-400 font-medium">Technologies</span>
+      {/* Core Capabilities Grid Section */}
+      <section className="py-16 sm:py-24 md:py-28 border-b border-secondary-800 relative">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="mb-10 sm:mb-16 max-w-3xl">
+            <div className="text-[10px] sm:text-xs font-mono text-primary-400 uppercase tracking-widest mb-2.5 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
+              CORE CAPABILITIES
+            </div>
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-display font-light text-white mb-3.5 tracking-tight">
+              Engineered for Speed, <br />
+              <span className="text-primary-400 font-medium">Built for Production.</span>
             </h2>
-            <p className="text-secondary-400 max-w-2xl font-light">
-              Powerful features built from the ground up to bring your creative ideas to life with absolute precision.
+            <p className="text-xs sm:text-base text-secondary-400 font-light leading-relaxed">
+              Every stage of modern web app construction is handled autonomously—from multi-file modular code generation and in-browser execution to one-click deployment.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-secondary-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {[
               {
                 id: "01",
-                title: "AI Code Generation",
-                description: "Describe your website and let AI generate clean, modern React code instantly.",
+                title: "Multi-File React Architecture",
+                description: "Generates modular JSX components with strict contract validation, local relative imports, and zero broken placeholders. Clean, maintainable code structure.",
+                badge: "CONTRACT ENGINE",
               },
               {
                 id: "02",
-                title: "Live Preview",
-                description: "See your changes in real-time with Sandpack's live sandbox environment.",
+                title: "Live Sandpack Sandbox",
+                description: "Experience your application in real-time inside an in-browser Vite virtual filesystem. Switch between desktop, tablet, and mobile viewports seamlessly.",
+                badge: "HMR SANDBOX",
               },
               {
                 id: "03",
-                title: "AI Refinement",
-                description: "Chat with AI to refine and improve your code based on your feedback.",
+                title: "Self-Healing AI Diagnostics",
+                description: "Frame-boundary interceptors catch runtime evaluation errors and syntax hiccups. One-click AI quick-fix heals the codebase automatically with full context.",
+                badge: "AUTO-FIX",
               },
               {
                 id: "04",
-                title: "One-Click Export",
-                description: "Export your project as a complete, ready-to-run npm package.",
+                title: "1-Click GitHub & Vercel Deploy",
+                description: "Auto-saves unsaved work, creates a personal GitHub repository, and triggers production edge builds on Vercel with dedicated domain links.",
+                badge: "PRODUCTION DEPLOY",
               },
               {
                 id: "05",
-                title: "Save & Continue",
-                description: "Save your projects and continue editing them anytime from anywhere.",
+                title: "Standalone ZIP Export",
+                description: "Download ready-to-run project archives configured with Vite, React 18, Lucide icons, and Tailwind CSS. Run anywhere with `npm run dev`.",
+                badge: "EXPORT ZIP",
               },
               {
                 id: "06",
-                title: "Multi-File Support",
-                description: "Work with multiple files and components in a single project.",
+                title: "NVIDIA & OpenRouter LLMs",
+                description: "Switch seamlessly between NVIDIA Nemotron-3 Ultra 550B, Qwen 3, Phi-4, and OpenRouter coder models optimized for structured code generation.",
+                badge: "DUAL ENGINES",
               },
-            ].map((feature, idx) => (
+              {
+                id: "07",
+                title: "Conversational AI Refinement",
+                description: "Chat directly with the AI assistant to modify individual components, update color palettes, or append new features without regenerating the entire app.",
+                badge: "AI CHAT",
+              },
+              {
+                id: "08",
+                title: "Database Workspace Sync",
+                description: "Supabase cloud database securely stores every project, revision snapshot, and live deployment link so you never lose your progress.",
+                badge: "PERSISTENCE",
+              },
+              {
+                id: "09",
+                title: "Monaco Code Editor Tabs",
+                description: "Inspect, tweak, and edit generated files manually using an integrated VS Code-powered Monaco editor with full syntax highlighting.",
+                badge: "FULL CONTROL",
+              },
+            ].map((feature) => (
               <div
-                key={idx}
-                className="bg-secondary-900 p-8 sm:p-10 hover:bg-secondary-800/50 transition-colors group relative"
+                key={feature.id}
+                className="bg-secondary-900/70 border border-secondary-800 p-5 sm:p-7 hover:border-primary-500/50 hover:bg-secondary-900 transition-all group relative flex flex-col justify-between"
               >
-                <div className="text-xs font-mono text-primary-400 mb-6 flex items-center justify-between">
-                  <span>[{feature.id}]</span>
-                  <span className="w-4 h-px bg-primary-400/50 group-hover:w-8 transition-all"></span>
+                <div>
+                  <div className="text-xs font-mono text-primary-400 mb-4 flex items-center justify-between">
+                    <span className="font-bold">[{feature.id}]</span>
+                    <span className="text-[9px] uppercase tracking-wider text-secondary-500 border border-secondary-700/60 px-2 py-0.5 group-hover:border-primary-500/40 group-hover:text-primary-300 transition-colors">
+                      {feature.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-display text-white mb-2 uppercase tracking-wide">
+                    {feature.title}
+                  </h3>
+                  <p className="text-secondary-400 text-xs sm:text-sm leading-relaxed font-light">
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="text-xl font-display text-white mb-3">
-                  {feature.title}
-                </h3>
-                <p className="text-secondary-400 text-sm leading-relaxed font-light">
-                  {feature.description}
-                </p>
-                <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-2 h-2 bg-primary-400"></div>
+                <div className="pt-4 mt-4 border-t border-secondary-800/60 flex items-center justify-between text-[10px] font-mono text-secondary-600 group-hover:text-primary-400 transition-colors">
+                  <span>SYSTEM_CAPABILITY</span>
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
                 </div>
               </div>
             ))}
@@ -203,13 +595,16 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className="max-w-7xl mx-auto px-4 py-24">
-        <div className="mb-16">
-          <div className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4">Workflow</div>
-          <h2 className="text-3xl md:text-5xl font-display font-light text-white tracking-tight">
-            The foundation underneath<br />
-            <span className="text-primary-400 font-medium">both disciplines.</span>
+      {/* How It Works / Workflow */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-16 sm:py-24 md:py-28">
+        <div className="mb-10 sm:mb-16">
+          <div className="text-[10px] sm:text-xs font-mono text-primary-400 uppercase tracking-widest mb-2.5 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
+            WORKFLOW PIPELINE
+          </div>
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-display font-light text-white tracking-tight">
+            From Natural Language to <br />
+            <span className="text-primary-400 font-medium">Live Cloud Deployment.</span>
           </h2>
         </div>
 
@@ -217,136 +612,235 @@ export default function Home() {
           {[
             {
               step: "01",
-              title: "Describe",
-              description: "Tell AI what website you want to create. Be as detailed as you like.",
-              action: "Write a prompt",
+              title: "Prompt & Architect",
+              description: "Select your AI engine (NVIDIA NIM or OpenRouter) and describe your application in natural language. The system creates contract schemas, generates modular JSX components, and configures Tailwind styling.",
+              tag: "STEP 1: ARCHITECTURE",
             },
             {
               step: "02",
-              title: "Generate",
-              description: "AI instantly generates clean, modern React code with Tailwind CSS.",
-              action: "Review code",
+              title: "Interactive Sandbox & Diagnostics",
+              description: "Test your application in real-time using the Sandpack in-browser preview. Switch viewport modes (Desktop, Tablet, Mobile), tweak code directly in Monaco, or click Auto-Fix to heal any runtime syntax issues.",
+              tag: "STEP 2: VALIDATION",
             },
             {
               step: "03",
-              title: "Export & Deploy",
-              description: "Download as a complete project or deploy directly to your server.",
-              action: "Get your site",
+              title: "1-Click Production Deploy & Sync",
+              description: "Click Deploy. The system auto-saves your project, creates a repository on your personal GitHub account, and spins up a live edge production deployment on Vercel with clean custom domain naming.",
+              tag: "STEP 3: CLOUD LAUNCH",
             },
           ].map((item) => (
-            <div key={item.step} className="group border border-secondary-800 bg-secondary-900 p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6 hover:border-primary-500/50 transition-colors">
-              <div className="flex-shrink-0 w-16 h-16 border border-secondary-700 bg-secondary-800 flex items-center justify-center text-xl font-display text-primary-400 group-hover:bg-primary-900/20 transition-colors">
+            <div
+              key={item.step}
+              className="group border border-secondary-800 bg-secondary-900/60 p-5 sm:p-7 flex flex-col md:flex-row md:items-center gap-4 sm:gap-6 hover:border-primary-500/50 transition-all relative overflow-hidden"
+            >
+              <div className="flex-shrink-0 w-12 sm:w-14 h-12 sm:h-14 border border-secondary-700 bg-secondary-800/80 flex items-center justify-center text-base sm:text-lg font-display text-primary-400 group-hover:bg-primary-500/10 group-hover:border-primary-400 transition-colors">
                 {item.step}
               </div>
-              <div className="flex-grow">
-                <h3 className="text-lg font-display text-white mb-2 uppercase tracking-wide">
-                  {item.title}
-                </h3>
-                <p className="text-secondary-400 text-sm font-light">{item.description}</p>
+              <div className="flex-grow space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <h3 className="text-base sm:text-lg font-display text-white uppercase tracking-wide">
+                    {item.title}
+                  </h3>
+                  <span className="text-[9px] font-mono text-primary-400/90 bg-primary-500/10 px-2 py-0.5">
+                    {item.tag}
+                  </span>
+                </div>
+                <p className="text-secondary-400 text-xs sm:text-sm font-light leading-relaxed">
+                  {item.description}
+                </p>
               </div>
-              <div className="flex-shrink-0">
-                <span className="text-xs font-mono text-primary-400 uppercase tracking-widest group-hover:text-primary-300 flex items-center gap-2">
-                  {item.action} <span className="bg-primary-500/20 px-2 py-1">&gt;</span>
-                </span>
+              <div className="flex-shrink-0 pt-2 md:pt-0">
+                <Link href="/builder">
+                  <span className="text-[10px] sm:text-xs font-mono text-primary-400 uppercase tracking-widest hover:text-primary-300 flex items-center gap-2 transition-colors cursor-pointer">
+                    Execute Stage <span className="bg-primary-500/20 px-2 py-1">&gt;</span>
+                  </span>
+                </Link>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Navigation Links Section (Technical Panels) */}
-      <section className="border-t border-secondary-800 bg-[#0a0f16] py-24">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Builder */}
-            <Link href="/builder">
-              <div className="h-full p-8 border border-secondary-800 bg-secondary-900 hover:border-primary-400 transition-colors cursor-pointer group flex flex-col justify-between">
-                <div>
-                  <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-6 border-b border-secondary-800 pb-2">Workspace</div>
-                  <h3 className="text-2xl font-display text-white mb-3">Builder</h3>
-                  <p className="text-sm text-secondary-400 font-light mb-8">
-                    Create new websites with AI assistance and live preview.
-                  </p>
-                </div>
-                <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between">
-                  Start building 
-                  <span className="transform group-hover:translate-x-2 transition-transform">→</span>
-                </div>
-              </div>
-            </Link>
+      {/* Comparison: Why AI Website Builder */}
+      <section className="border-t border-secondary-800 bg-[#060a10] py-16 sm:py-24">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="mb-10 sm:mb-14 text-center max-w-2xl mx-auto">
+            <div className="text-[10px] sm:text-xs font-mono text-primary-400 uppercase tracking-widest mb-2">
+              SYSTEM ADVANTAGE
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-display font-light text-white tracking-tight">
+              Standard Code, <span className="text-primary-400 font-medium">No Proprietary Lock-In.</span>
+            </h2>
+          </div>
 
-            {/* Projects */}
-            <Link href="/projects">
-              <div className="h-full p-8 border border-secondary-800 bg-secondary-900 hover:border-primary-400 transition-colors cursor-pointer group flex flex-col justify-between">
-                <div>
-                  <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-6 border-b border-secondary-800 pb-2">Repository</div>
-                  <h3 className="text-2xl font-display text-white mb-3">Projects</h3>
-                  <p className="text-sm text-secondary-400 font-light mb-8">
-                    View and manage all your saved projects in one secure location.
-                  </p>
-                </div>
-                <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between">
-                  View projects 
-                  <span className="transform group-hover:translate-x-2 transition-transform">→</span>
-                </div>
-              </div>
-            </Link>
-
-            {/* Auth */}
-            <Link href="/auth/signup">
-              <div className="h-full p-8 border border-secondary-800 bg-secondary-900 hover:border-primary-400 transition-colors cursor-pointer group flex flex-col justify-between">
-                <div>
-                  <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-6 border-b border-secondary-800 pb-2">Access</div>
-                  <h3 className="text-2xl font-display text-white mb-3">Authentication</h3>
-                  <p className="text-sm text-secondary-400 font-light mb-8">
-                    Create your account via Google and initialize your environment.
-                  </p>
-                </div>
-                <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between">
-                  Get started 
-                  <span className="transform group-hover:translate-x-2 transition-transform">→</span>
-                </div>
-              </div>
-            </Link>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead>
+                <tr className="border-b border-secondary-800 text-[10px] sm:text-xs font-mono uppercase tracking-widest text-secondary-500">
+                  <th className="py-3 px-4">Feature</th>
+                  <th className="py-3 px-4 text-primary-400">AI Website Builder</th>
+                  <th className="py-3 px-4 text-secondary-500">Legacy AI Builders</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs sm:text-sm font-light divide-y divide-secondary-800/60">
+                <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">File Structure</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Modular multi-file Vite + React JSX</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Single giant monolithic file</td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">Preview Engine</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Native Sandpack in-browser HMR</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Laggy remote iframes</td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">Error Handling</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Self-Healing AI Auto-Fix with stack traces</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Manual copy-paste error prompts</td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">Cloud Deployment</td>
+                  <td className="py-3.5 px-4 text-white font-medium">1-Click direct to user GitHub &amp; Vercel</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Walled garden hosting fees</td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">Code Export</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Ready-to-run ZIP archive with Vite + Tailwind</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Incomplete code or raw snippets</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="bg-primary-900/20 border-t border-primary-900/50 py-24 relative overflow-hidden">
-        {/* Abstract geometric lines */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(var(--color-primary-400) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary-400) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-        
-        <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl font-display font-light text-white mb-6 tracking-tight">
-            Ready to <span className="font-medium text-primary-400">Deploy?</span>
-          </h2>
-          <p className="text-lg text-secondary-400 font-light mb-10">
-            Start creating your next production-ready website with AI today.
-          </p>
-          <Link href="/builder">
-            <Button
-              variant="primary"
-              size="lg"
-              className="bg-primary-500 hover:bg-primary-400 text-secondary-900 font-bold rounded-none px-12 py-4 uppercase tracking-widest text-sm transition-colors"
+      {/* Navigation Quick Access (Cyberpunk Panels) */}
+      <section className="border-t border-secondary-800 bg-[#070b10] py-16 sm:py-24">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            {/* Builder Workspace */}
+            <Link href="/builder">
+              <div className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-6 sm:w-8 h-6 sm:h-8 border-t-2 border-r-2 border-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                  <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-3 sm:mb-4 border-b border-secondary-800 pb-2 flex items-center justify-between">
+                    <span>WORKSPACE</span>
+                    <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-display text-white mb-2">Builder</h3>
+                  <p className="text-xs sm:text-sm text-secondary-400 font-light mb-5 sm:mb-6 leading-relaxed">
+                    AI generation canvas, multi-provider model selection, Sandpack live sandbox, Monaco code editor, and 1-click Vercel deployment.
+                  </p>
+                </div>
+                <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between pt-3 sm:pt-4 border-t border-secondary-800/80">
+                  Launch Environment
+                  <span className="transform group-hover:translate-x-2 transition-transform">→</span>
+                </div>
+              </div>
+            </Link>
+
+            {/* Project Repository */}
+            <Link href="/projects">
+              <div className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-6 sm:w-8 h-6 sm:h-8 border-t-2 border-r-2 border-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div>
+                  <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-3 sm:mb-4 border-b border-secondary-800 pb-2 flex items-center justify-between">
+                    <span>REPOSITORY</span>
+                    <span className="text-[9px] text-secondary-500">SUPABASE</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-display text-white mb-2">My Projects</h3>
+                  <p className="text-xs sm:text-sm text-secondary-400 font-light mb-5 sm:mb-6 leading-relaxed">
+                    Browse saved applications, manage versions, and jump directly to your live Vercel domains and GitHub repositories.
+                  </p>
+                </div>
+                <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between pt-3 sm:pt-4 border-t border-secondary-800/80">
+                  Access Projects
+                  <span className="transform group-hover:translate-x-2 transition-transform">→</span>
+                </div>
+              </div>
+            </Link>
+
+            {/* Authentication Portal */}
+            <div
+              onClick={() => signInWithGoogle('/builder')}
+              className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden"
             >
-              Launch Builder _
-            </Button>
-          </Link>
+              <div className="absolute top-0 right-0 w-6 sm:w-8 h-6 sm:h-8 border-t-2 border-r-2 border-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <div>
+                <div className="text-[10px] font-mono text-primary-400 uppercase tracking-widest mb-3 sm:mb-4 border-b border-secondary-800 pb-2 flex items-center justify-between">
+                  <span>SECURITY</span>
+                  <span className="text-[9px] text-secondary-500">GOOGLE OAUTH</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-display text-white mb-2">Cloud Access</h3>
+                <p className="text-xs sm:text-sm text-secondary-400 font-light mb-5 sm:mb-6 leading-relaxed">
+                  Authenticate with Google to unlock cloud synchronization, auto-saving before deploy, and persistent project history.
+                </p>
+              </div>
+              <div className="text-primary-400 font-mono text-xs uppercase tracking-widest flex items-center justify-between pt-3 sm:pt-4 border-t border-secondary-800/80">
+                Connect with Google
+                <span className="transform group-hover:translate-x-2 transition-transform">→</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Full Width CTA Banner */}
+      <section className="bg-gradient-to-b from-primary-950/20 to-[#05080c] border-t border-primary-900/40 py-16 sm:py-24 relative overflow-hidden">
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(var(--color-primary-400) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary-400) 1px, transparent 1px)', backgroundSize: '36px 36px' }}></div>
+
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 text-center relative z-10 space-y-5 sm:space-y-6">
+          <div className="inline-flex items-center gap-2 text-[10px] sm:text-xs font-mono uppercase tracking-[0.2em] text-primary-400">
+            <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
+            ZERO SETUP REQUIRED
+          </div>
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-display font-light text-white tracking-tight">
+            Ready to Build and <br />
+            <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-teal-200">
+              Deploy Your Vision?
+            </span>
+          </h2>
+          <p className="text-xs sm:text-base md:text-lg text-secondary-400 font-light max-w-xl mx-auto leading-relaxed">
+            Create production React applications with Tailwind CSS in seconds.
+            No dependencies to configure, no complex build scripts.
+          </p>
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
+            <Link href="/builder" className="w-full sm:w-auto">
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full sm:w-auto bg-primary-500 hover:bg-primary-400 text-secondary-900 font-bold rounded-none px-8 sm:px-12 py-3.5 sm:py-4 uppercase tracking-widest text-xs transition-colors shadow-lg shadow-primary-500/20 cursor-pointer"
+              >
+                Launch Builder Workspace _
+              </Button>
+            </Link>
+            <Link href="/projects" className="w-full sm:w-auto">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full sm:w-auto bg-transparent border border-secondary-700 hover:border-primary-400 text-white rounded-none px-8 sm:px-10 py-3.5 sm:py-4 uppercase tracking-widest text-xs transition-colors cursor-pointer"
+              >
+                My Projects ↗
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-[#05080c] border-t border-secondary-800 py-12">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-8 h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
-              <span className="text-primary-400 font-mono text-xs">AI</span>
+      <footer className="bg-[#03060a] border-t border-secondary-800 py-8 sm:py-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6 text-center sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
+              <span className="text-primary-400 font-mono text-[10px]">AI</span>
             </div>
-            <span className="text-white font-display uppercase tracking-widest text-sm">AI Website Builder</span>
+            <span className="text-white font-display uppercase tracking-widest text-xs font-medium">
+              AI Website Builder
+            </span>
           </div>
-          <div className="text-secondary-500 text-xs font-mono uppercase tracking-widest">
-            © 2026 AI BUILDER. ALL RIGHTS RESERVED.
+          <div className="text-secondary-500 text-[9px] sm:text-[11px] font-mono uppercase tracking-widest">
+            © {new Date().getFullYear()} AI WEBSITE BUILDER. VITE • REACT • TAILWIND • VERCEL.
           </div>
         </div>
       </footer>

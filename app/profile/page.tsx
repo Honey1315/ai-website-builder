@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export default async function ProfilePage() {
   const cookieStore = await cookies();
@@ -26,16 +27,7 @@ export default async function ProfilePage() {
   } = await supabase.auth.getSession();
 
   if (!session) {
-    // Redirect to login if not authenticated
-    // In a real app, you might use redirect() from 'next/navigation'
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12">
-        <p className="text-red-600">You must be logged in to view this page. Redirecting...</p>
-        <a href="/auth/login" className="text-blue-600 underline">
-          Click here if not redirected automatically
-        </a>
-      </div>
-    );
+    redirect('/');
   }
 
   // Fetch user data from your database if needed
