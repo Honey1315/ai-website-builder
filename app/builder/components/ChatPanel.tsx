@@ -10,6 +10,7 @@ interface ChatPanelProps {
   isAuthenticated?: boolean;
   messages?: ChatMessage[];
   isLoading?: boolean;
+  statusMessage?: string;
 }
 
 export default function ChatPanel({
@@ -18,6 +19,7 @@ export default function ChatPanel({
   isAuthenticated = false,
   messages = [],
   isLoading = false,
+  statusMessage,
 }: ChatPanelProps) {
   const [message, setMessage] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -139,7 +141,7 @@ export default function ChatPanel({
                 <div className="p-2.5 bg-[#08111c] border border-primary-500/30 text-primary-300 text-[11px] self-start w-[95%] flex items-center gap-2">
                   <div className="w-2.5 h-2.5 border border-primary-400 border-t-transparent animate-spin"></div>
                   <span className="text-[10px] uppercase tracking-wider text-primary-400">
-                    Executing refinement sequence...
+                    {statusMessage || "Executing refinement sequence..."}
                   </span>
                 </div>
               )}

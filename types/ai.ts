@@ -81,4 +81,12 @@ export type GenerateStreamEvent =
     }
   | { type: "error"; error: string };
 
+export type RefineStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "targets"; files: string[] }
+  | { type: "file"; file: FileData; index: number; total: number }
+  | { type: "fixing"; files: string[] }
+  | { type: "done"; code: string; files: FileData[]; summary: string }
+  | { type: "error"; error: string };
+
 export type { ProjectManifest, FileMetadata, ValidationMismatch } from "@/types/contract";

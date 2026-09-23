@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import type { ChatMessage, FileData, GenerateStreamEvent } from "@/types/ai";
+import type { ChatMessage, FileData, GenerateStreamEvent, RefineStreamEvent } from "@/types/ai";
 import PromptInput from "./components/PromptInput";
 import PreviewPanel from "./components/PreviewPanel";
 import CodeEditor from "./components/CodeEditor";
@@ -36,13 +36,11 @@ function mergeFile(files: FileData[], nextFile: FileData) {
   return updatedFiles;
 }
 
-
-
-function RefineWaitingStatus() {
+function RefineWaitingStatus({ status }: { status?: string }) {
   return (
     <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center gap-4 shrink-0">
       <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent animate-spin rounded-none"></div>
-      <span>[SYS] Refining code architecture...</span>
+      <span>{status || "[SYS] Refining code architecture..."}</span>
     </div>
   );
 }
@@ -58,6 +56,7 @@ function BuilderPageInner() {
   const [loading, setLoading] = useState(false);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [refineStatus, setRefineStatus] = useState("");
   const [error, setError] = useState("");
   const [sandpackError, setSandpackError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -391,6 +390,7 @@ function BuilderPageInner() {
     setError("");
     setSandpackError(null);
     setRefining(true);
+    setRefineStatus("Analyzing refinement request...");
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -404,7 +404,10 @@ function BuilderPageInner() {
     try {
       const res = await fetch("/api/refine", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({
           message,
           messages: outgoingMessages,
@@ -419,56 +422,93 @@ function BuilderPageInner() {
         }),
       });
 
-      const data = (await res.json()) as RefineApiResponse;
-      if (!res.ok || data.error) {
-        const errorMsg = data.error || "Failed to refine code";
-        setError(errorMsg);
+      if (!res.ok || !res.body) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || "Failed to refine code");
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream")) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
+
+          for (const eventText of events) {
+            const dataLine = eventText.split("\n").find((line) => line.startsWith("data: "));
+            if (!dataLine) continue;
+            const event = JSON.parse(dataLine.slice(6)) as RefineStreamEvent;
+
+            if (event.type === "status") {
+              setRefineStatus(event.message);
+            } else if (event.type === "targets") {
+              setRefineStatus(`Targeting ${event.files.map((f) => f.replace(/^src\//, "")).join(", ")}...`);
+            } else if (event.type === "file") {
+              setFiles((currentFiles) => {
+                const updated = [...currentFiles];
+                const index = updated.findIndex((f) => f.name === event.file.name);
+                if (index >= 0) updated[index] = event.file;
+                else updated.push(event.file);
+                return updated;
+              });
+              if (event.file.name.endsWith("App.jsx")) {
+                setCode(event.file.content);
+              }
+              setRefineStatus(`Updated ${event.file.name.replace(/^src\//, "")} (${event.index} of ${event.total})`);
+            } else if (event.type === "fixing") {
+              setRefineStatus(`Auto-fixing ${event.files.length} file(s)...`);
+            } else if (event.type === "done") {
+              if (event.code) setCode(event.code);
+              if (event.files && event.files.length > 0) setFiles(event.files);
+              setChatMessages((prev) => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: event.summary || "Applied modifications successfully.",
+                  timestamp: Date.now(),
+                },
+              ]);
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          }
+          if (done) break;
+        }
+      } else {
+        // Fallback for standard JSON responses
+        const data = (await res.json()) as RefineApiResponse;
+        if (data.error) throw new Error(data.error);
+
+        if (data.code) setCode(data.code);
+
+        if (data.files && data.files.length > 0) {
+          setFiles((currentFiles) => {
+            const updated = [...currentFiles];
+            data.files!.forEach((file) => {
+              const index = updated.findIndex((f) => f.name === file.name);
+              if (index >= 0) updated[index] = file;
+              else updated.push(file);
+            });
+            return updated;
+          });
+        }
+
         setChatMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `[ERR] ${errorMsg}`,
+            content: data.summary || "Applied modifications successfully.",
             timestamp: Date.now(),
           },
         ]);
-        return;
       }
-
-      if (data.code) setCode(data.code);
-
-      if (data.files && data.files.length > 0) {
-        setFiles((currentFiles) => {
-          const updated = [...currentFiles];
-          data.files!.forEach((file) => {
-            const index = updated.findIndex((f) => f.name === file.name);
-            if (index >= 0) updated[index] = file;
-            else updated.push(file);
-          });
-          return updated;
-        });
-      } else {
-        setFiles((currentFiles) => {
-          const updated = [...currentFiles];
-          const appIndex = updated.findIndex((f) => f.name === "App.jsx");
-          if (appIndex >= 0) {
-            updated[appIndex] = { ...updated[appIndex], content: data.code! };
-          } else {
-            updated.push({ name: "App.jsx", content: data.code!, language: "javascript" });
-          }
-          return updated;
-        });
-      }
-
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: data.summary || "Applied modifications successfully.",
-          timestamp: Date.now(),
-        },
-      ]);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       setError(errorMsg);
@@ -483,6 +523,7 @@ function BuilderPageInner() {
       ]);
     } finally {
       setRefining(false);
+      setRefineStatus("");
     }
   };
 
@@ -922,6 +963,7 @@ function BuilderPageInner() {
               isAuthenticated={!!user}
               messages={chatMessages}
               isLoading={refining}
+              statusMessage={refineStatus}
             />
           </div>
         </div>
@@ -947,7 +989,7 @@ function BuilderPageInner() {
             </div>
           )}
 
-          {refining && <RefineWaitingStatus />}
+          {refining && <RefineWaitingStatus status={refineStatus} />}
 
           {manifest && (
             <div className="border border-secondary-800 bg-secondary-900/50 p-6 font-mono text-xs text-secondary-400 shrink-0 relative">

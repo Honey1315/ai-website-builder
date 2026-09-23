@@ -33,7 +33,7 @@ import {
   ensureMissingImportsExist,
 } from "@/lib/contractHelpers";
 
-import { ChatMessage, FileData, GenerateResponse, ProviderOptions, RefineResponse } from "@/types/ai";
+import { ChatMessage, FileData, GenerateResponse, ProviderOptions, RefineResponse, RefineStreamEvent } from "@/types/ai";
 import { FileMetadata, FileSummary, ProjectManifest, ValidationMismatch } from "@/types/contract";
 
 const MAX_FIX_ROUNDS = 2;
@@ -293,9 +293,12 @@ export class AIService {
   static async refineCode(
     message: string,
     context: RefineContext = {},
-    options: ProviderOptions = {}
+    options: ProviderOptions = {},
+    onEvent?: (event: RefineStreamEvent) => void
   ): Promise<RefineResponse> {
     try {
+      onEvent?.({ type: "status", message: "Analyzing project and selecting target files..." });
+
       const currentFiles = context.files && context.files.length > 0
         ? context.files
         : context.code ? [{ name: "src/App.jsx", content: context.code, language: "javascript" }] : [];
@@ -317,8 +320,12 @@ export class AIService {
 
       const validatedFiles = AIService.validateSelectedPaths(selectedFiles, currentFiles);
       if (validatedFiles.length === 0) {
-        return { code: "", error: "No relevant files found for this refinement request." };
+        const errorMsg = "No relevant files found for this refinement request.";
+        onEvent?.({ type: "error", error: errorMsg });
+        return { code: "", error: errorMsg };
       }
+
+      onEvent?.({ type: "targets", files: validatedFiles });
 
       const expandedFiles = AIService.expandRefinementFiles({
         selectedFiles: validatedFiles,
@@ -328,8 +335,15 @@ export class AIService {
 
       const relevantFiles = currentFiles.filter(f => expandedFiles.includes(f.name));
       const refinedFiles: FileData[] = [];
+      let fileIdx = 0;
+      const totalFiles = relevantFiles.length;
 
       for (const targetFile of relevantFiles) {
+        fileIdx++;
+        onEvent?.({
+          type: "status",
+          message: `Refining ${targetFile.name.replace(/^src\//, "")} (${fileIdx} of ${totalFiles})...`,
+        });
         const result = await callWithRetry(async () => {
           const formattedPrompt = formatPrompt(REFINE_PROMPT_TEMPLATE, {
             prompt: context.prompt || "Refine the current project",
@@ -371,14 +385,26 @@ export class AIService {
           }
           console.log("extracted: ", extracted);
           if (AIService.detectTruncatedOutput(extracted)) {
-            return { code: "", error: `Refinement produced incomplete output for ${targetFile.name}.` };
+            const errorMsg = `Refinement produced incomplete output for ${targetFile.name}.`;
+            onEvent?.({ type: "error", error: errorMsg });
+            return { code: "", error: errorMsg };
           }
           refinedFiles.push(...extracted);
+          for (const item of extracted) {
+            onEvent?.({
+              type: "file",
+              file: item,
+              index: fileIdx,
+              total: totalFiles,
+            });
+          }
         }
       }
 
       if (refinedFiles.length === 0) {
-        return { code: "", error: "Refinement did not produce any changes." };
+        const errorMsg = "Refinement did not produce any changes.";
+        onEvent?.({ type: "error", error: errorMsg });
+        return { code: "", error: errorMsg };
       }
 
       const candidateFiles = AIService.mergeRefinedFiles(currentFiles, refinedFiles);
@@ -386,13 +412,25 @@ export class AIService {
 
       let finalFiles = candidateFiles;
       if (validation.mismatches.length > 0) {
+        const affectedFiles = getAffectedFiles(validation.mismatches);
+        onEvent?.({
+          type: "fixing",
+          files: affectedFiles,
+        });
+        onEvent?.({
+          type: "status",
+          message: `Auto-fixing contract mismatches across ${affectedFiles.length} file(s)...`,
+        });
+
         finalFiles = await AIService.autoFixFiles(
           context.prompt || message, structure, manifest, candidateFiles, validation.mismatches, new Map(), options
         );
         const revalidation = AIService.validateGeneratedFiles(manifest, finalFiles);
         if (revalidation.mismatches.length > 0) {
           finalFiles = currentFiles;
-          return { code: "", error: "Refinement produced invalid code that could not be auto-fixed." };
+          const errorMsg = "Refinement produced invalid code that could not be auto-fixed.";
+          onEvent?.({ type: "error", error: errorMsg });
+          return { code: "", error: errorMsg };
         }
       }
 
@@ -402,9 +440,19 @@ export class AIService {
       const summary = modifiedFileNames.length > 0
         ? `Updated ${modifiedFileNames.join(", ")}.`
         : "Refinement completed.";
+
+      onEvent?.({
+        type: "done",
+        code: appFile?.content || "",
+        files: finalFiles,
+        summary,
+      });
+
       return { code: appFile?.content || "", files: finalFiles, summary };
     } catch (error) {
-      return { code: "", error: error instanceof Error ? error.message : "Failed to refine code" };
+      const errorMsg = error instanceof Error ? error.message : "Failed to refine code";
+      onEvent?.({ type: "error", error: errorMsg });
+      return { code: "", error: errorMsg };
     }
   }
 
