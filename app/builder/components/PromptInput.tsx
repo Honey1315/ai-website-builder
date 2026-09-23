@@ -24,9 +24,7 @@ export default function PromptInput({
   const [prompt, setPrompt] = useState(initialPrompt);
 
   useEffect(() => {
-    if (initialPrompt && !prompt) {
-      setPrompt(initialPrompt);
-    }
+    setPrompt(initialPrompt || "");
   }, [initialPrompt]);
 
   return (

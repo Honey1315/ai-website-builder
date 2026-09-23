@@ -297,23 +297,51 @@ function BuilderPageInner() {
       .then((project: Project) => {
         if (cancelled) return;
         setProjectId(project.id);
-        setProjectName(project.name || "");
-        setOriginalPrompt(project.prompt || project.description || "");
+        const loadedPrompt = project.prompt || project.description || "";
+        setOriginalPrompt(loadedPrompt);
         setFiles(project.files || []);
         const appFile = project.files?.find((f) => f.name.endsWith("App.jsx"));
         setCode(appFile?.content || project.files?.[0]?.content || "");
+
+        let initialMessages: ChatMessage[] = [];
         if (project.messages && project.messages.length > 0) {
-          setChatMessages(project.messages);
+          const hasUserPrompt = project.messages.some(
+            (m) => m.role === "user" && loadedPrompt && m.content.trim() === loadedPrompt.trim()
+          );
+          if (!hasUserPrompt && loadedPrompt) {
+            initialMessages = [
+              {
+                id: crypto.randomUUID(),
+                role: "user",
+                content: loadedPrompt,
+                timestamp: project.createdAt ? new Date(project.createdAt).getTime() : Date.now(),
+              },
+              ...project.messages,
+            ];
+          } else {
+            initialMessages = project.messages;
+          }
         } else {
-          setChatMessages([
+          initialMessages = [
+            ...(loadedPrompt
+              ? [
+                  {
+                    id: crypto.randomUUID(),
+                    role: "user" as const,
+                    content: loadedPrompt,
+                    timestamp: project.createdAt ? new Date(project.createdAt).getTime() : Date.now(),
+                  },
+                ]
+              : []),
             {
               id: crypto.randomUUID(),
-              role: "assistant",
+              role: "assistant" as const,
               content: `Project "${project.name || "Untitled"}" loaded. You can submit refinement directives below to modify components.`,
               timestamp: Date.now(),
             },
-          ]);
+          ];
         }
+        setChatMessages(initialMessages);
 
         // Restore dependencies from saved package.json so Sandpack and sidebar preserve them
         const pkgFile = project.files?.find((f) => f.name === "package.json" || f.name === "/package.json");
@@ -469,14 +497,20 @@ function BuilderPageInner() {
           setGenerationStatus(
             `Generation paused: ${event.completedFiles.length} file(s) preserved. ${event.remainingFiles.length} remaining.`
           );
+          const userMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "user",
+            content: originalPrompt || prompt,
+            timestamp: Date.now(),
+          };
           const assistantMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: "assistant",
             content: `⚠️ Generation was paused: ${event.error}\n\nPreserved ${event.completedFiles.length} generated file(s). You can switch models in the header and click "Resume Generation", or refine existing files.`,
             timestamp: Date.now(),
           };
-          setChatMessages([assistantMsg]);
-          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [assistantMsg]);
+          setChatMessages([userMsg, assistantMsg]);
+          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [userMsg, assistantMsg]);
           return;
         }
         if (event.type === "done") {
@@ -486,14 +520,20 @@ function BuilderPageInner() {
           setIsPartialGeneration(false);
           setRemainingFiles([]);
           setGenerationStatus(`Generated ${event.files.length} files.`);
+          const userMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "user",
+            content: originalPrompt || prompt,
+            timestamp: Date.now(),
+          };
           const assistantMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: "assistant",
             content: `Project generated with ${event.files.length} files. Enter refinement instructions below to customize components or add features.`,
             timestamp: Date.now(),
           };
-          setChatMessages([assistantMsg]);
-          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [assistantMsg]);
+          setChatMessages([userMsg, assistantMsg]);
+          saveDraftToStorage(event.files, event.code, originalPrompt || prompt, event.manifest, [userMsg, assistantMsg]);
           return;
         }
         if (event.type === "error") {
