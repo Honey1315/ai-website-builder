@@ -7,6 +7,11 @@ import {
 } from "@codesandbox/sandpack-react";
 import { ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
 import type { FileData } from "@/types/ai";
+import {
+  sanitizeDependencies,
+  scanCodeForImportedPackages,
+  sanitizePackageVersion,
+} from "@/lib/dependencySanitizer";
 
 interface SandpackWrapperProps {
   code: string;
@@ -373,23 +378,48 @@ export default function SandpackWrapper({
   const sandpackFiles: SandpackFileMap = { ...BASE_FILES };
 
   const safeDependencies = useMemo(() => {
-    const filtered: Record<string, string> = {};
+    // 1. Sanitize incoming dependencies from manifest / props
+    const rawDeps: Record<string, string> = {};
     if (dependencies) {
       for (const [key, value] of Object.entries(dependencies)) {
         if (!BUILD_ONLY_DEPENDENCIES.has(key)) {
-          filtered[key] = value;
+          rawDeps[key] = value;
         }
       }
     }
+    const sanitizedFromProps = sanitizeDependencies(rawDeps);
+
+    // 2. Auto-detect any packages imported in files that weren't declared in manifest
+    const autoDetectedDeps: Record<string, string> = {};
+    if (files && files.length > 0) {
+      for (const file of files) {
+        if (
+          file.content &&
+          (file.name.endsWith(".jsx") ||
+            file.name.endsWith(".js") ||
+            file.name.endsWith(".tsx") ||
+            file.name.endsWith(".ts"))
+        ) {
+          const imported = scanCodeForImportedPackages(file.content);
+          for (const pkg of imported) {
+            if (!BUILD_ONLY_DEPENDENCIES.has(pkg) && !sanitizedFromProps[pkg]) {
+              autoDetectedDeps[pkg] = sanitizePackageVersion(pkg, "latest");
+            }
+          }
+        }
+      }
+    }
+
     return {
       react: "^18.3.1",
       "react-dom": "^18.3.1",
       "lucide-react": "^0.475.0",
       clsx: "^2.1.1",
       "tailwind-merge": "^2.6.0",
-      ...filtered,
+      ...sanitizedFromProps,
+      ...autoDetectedDeps,
     };
-  }, [dependencies]);
+  }, [dependencies, files]);
 
   const customSetup = useMemo(
     () => ({

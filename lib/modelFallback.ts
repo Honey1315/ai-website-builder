@@ -16,8 +16,8 @@ export interface RetryConfig {
 }
 
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  retryDelay: 1000,
-  maxRetries: 3,
+  retryDelay: 800,
+  maxRetries: 2,
 };
 
 function delay(ms: number): Promise<void> {

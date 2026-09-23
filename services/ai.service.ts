@@ -31,7 +31,13 @@ import {
   isDataOrUtilFile,
   orderedManifestFiles,
   ensureMissingImportsExist,
+  findComponentFile,
 } from "@/lib/contractHelpers";
+import {
+  scanCodeForImportedPackages,
+  sanitizeDependencies,
+  sanitizePackageVersion,
+} from "@/lib/dependencySanitizer";
 
 import { ChatMessage, FileData, GenerateResponse, ProviderOptions, RefineResponse, RefineStreamEvent } from "@/types/ai";
 import { FileMetadata, FileSummary, ProjectManifest, ValidationMismatch } from "@/types/contract";
@@ -427,10 +433,17 @@ export class AIService {
         );
         const revalidation = AIService.validateGeneratedFiles(manifest, finalFiles);
         if (revalidation.mismatches.length > 0) {
-          finalFiles = currentFiles;
-          const errorMsg = "Refinement produced invalid code that could not be auto-fixed.";
-          onEvent?.({ type: "error", error: errorMsg });
-          return { code: "", error: errorMsg };
+          // Only abort if there are hard structural failures (e.g. broken imports or missing component exports)
+          const hardErrors = revalidation.mismatches.filter(
+            (m) => m.type === "missing_dependency" || m.type === "export_mismatch"
+          );
+          if (hardErrors.length > 0) {
+            finalFiles = currentFiles;
+            const errorMsg = "Refinement produced invalid code that could not be auto-fixed.";
+            onEvent?.({ type: "error", error: errorMsg });
+            return { code: "", error: errorMsg };
+          }
+          console.warn("[Refine] Soft contract warnings detected; proceeding with evolved code.");
         }
       }
 
@@ -441,14 +454,43 @@ export class AIService {
         ? `Updated ${modifiedFileNames.join(", ")}.`
         : "Refinement completed.";
 
+      // Dynamically evolve manifest contracts and package dependencies
+      const evolvedMetadata = buildMetadataMap(finalFiles);
+      const updatedComponents = manifest.components.map((comp) => {
+        const filePath = findComponentFile(manifest, comp.name);
+        const meta = filePath ? evolvedMetadata.get(filePath) : undefined;
+        if (meta && meta.componentProps[comp.name] && meta.componentProps[comp.name].length > 0) {
+          return { ...comp, props: meta.componentProps[comp.name] };
+        }
+        return comp;
+      });
+
+      const detectedPackages: Record<string, string> = { ...(manifest.packages?.dependencies || {}) };
+      for (const file of finalFiles) {
+        if (file.content) {
+          for (const pkg of scanCodeForImportedPackages(file.content)) {
+            if (!detectedPackages[pkg]) {
+              detectedPackages[pkg] = sanitizePackageVersion(pkg, "latest");
+            }
+          }
+        }
+      }
+
+      const updatedManifest: ProjectManifest = {
+        ...manifest,
+        components: updatedComponents,
+        packages: { dependencies: sanitizeDependencies(detectedPackages) },
+      };
+
       onEvent?.({
         type: "done",
         code: appFile?.content || "",
         files: finalFiles,
+        manifest: updatedManifest,
         summary,
       });
 
-      return { code: appFile?.content || "", files: finalFiles, summary };
+      return { code: appFile?.content || "", files: finalFiles, manifest: updatedManifest, summary };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Failed to refine code";
       onEvent?.({ type: "error", error: errorMsg });
@@ -509,6 +551,7 @@ export class AIService {
       return filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || null;
     };
 
+    // 1. Downward expansion: add children imported by selected files
     for (const filePath of selectedFiles) {
       const componentName = getComponentName(filePath);
       if (!componentName) continue;
@@ -521,6 +564,24 @@ export class AIService {
         }
       }
     }
+
+    // 2. Upward expansion: ensure caller components (like App.jsx) stay synchronized
+    for (const filePath of selectedFiles) {
+      const componentName = getComponentName(filePath);
+      if (!componentName || componentName === "App") continue;
+
+      for (const [parentName, children] of Object.entries(manifest.dependencies || {})) {
+        if (children.includes(componentName)) {
+          const parentFile = parentName === "App"
+            ? (existingPaths.has("src/App.jsx") ? "src/App.jsx" : "App.jsx")
+            : manifest.components.find(c => c.name === parentName)?.file;
+          if (parentFile && existingPaths.has(parentFile)) {
+            expanded.add(parentFile);
+          }
+        }
+      }
+    }
+
     return Array.from(expanded).sort();
   }
 

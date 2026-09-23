@@ -143,7 +143,7 @@ IMPORTANT:
 4. The "components" array defines the contracts for any custom React components located in "src/components/". Ensure every component listed in the Project Structure has a corresponding contract in "components".
 5. Do NOT invent or add components unless they are explicitly present in the supplied Project Structure.
 6. In "dependencies", map each parent component to an array of names of child custom components it imports. If a component has no child custom components, map it to an empty array "[]".
-7. In "packages.dependencies", list all runtime packages required for the project based on the user's request. Always include "react" and "react-dom" as baseline, plus any external libraries the app will import (e.g., "lucide-react"), using concrete semver (never use "latest").
+7. In "packages.dependencies", list all runtime packages required for the project based on the user's request. Always include "react": "^18.3.1" and "react-dom": "^18.3.1" as baseline, plus any external libraries the app will import with accurate semver (e.g., "lucide-react": "^0.475.0", "canvas-confetti": "^1.9.4", "framer-motion": "^11.18.0", "recharts": "^2.15.0") or "latest". Never invert or hallucinate package major versions (e.g. canvas-confetti is "^1.9.4", not "^19.4.0").
 8. "architecture" must always be:
 {
   "framework": "react",

@@ -6,6 +6,7 @@ import type { ChatMessage } from "@/types/ai";
 
 interface ChatPanelProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   error?: string | null;
   isAuthenticated?: boolean;
   messages?: ChatMessage[];
@@ -15,6 +16,7 @@ interface ChatPanelProps {
 
 export default function ChatPanel({
   onSend,
+  onStop,
   error,
   isAuthenticated = false,
   messages = [],
@@ -168,14 +170,26 @@ export default function ChatPanel({
             <span>ENTER to transmit · SHIFT+ENTER for newline</span>
           </div>
 
-          <button
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none disabled:opacity-50 border border-primary-500 cursor-pointer shrink-0"
-            onClick={handleSend}
-            disabled={!message.trim() || isLoading}
-          >
-            <span>{isLoading ? "Processing..." : "Transmit Refinement"}</span>
-            <span className="font-sans">↗</span>
-          </button>
+          {isLoading ? (
+            <button
+              type="button"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-danger-500/20 text-danger-400 hover:bg-danger-500/30 hover:text-danger-300 transition-colors rounded-none border border-danger-500/50 cursor-pointer shrink-0"
+              onClick={onStop}
+            >
+              <span className="w-2 h-2 bg-danger-400 block animate-pulse"></span>
+              <span>■ Stop Refinement</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none disabled:opacity-50 border border-primary-500 cursor-pointer shrink-0"
+              onClick={handleSend}
+              disabled={!message.trim()}
+            >
+              <span>Transmit Refinement</span>
+              <span className="font-sans">↗</span>
+            </button>
+          )}
         </>
       )}
     </div>

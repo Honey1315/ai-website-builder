@@ -1,6 +1,11 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { FileData } from "@/types/ai";
+import {
+  sanitizeDependencies,
+  scanCodeForImportedPackages,
+  sanitizePackageVersion,
+} from "./dependencySanitizer";
 
 export async function createProjectZip(
   projectName: string,
@@ -34,6 +39,9 @@ export async function createProjectZip(
       } else if (filePath === "package.json") {
         try {
           const parsed = JSON.parse(content);
+          if (parsed.dependencies) {
+            parsed.dependencies = sanitizeDependencies(parsed.dependencies);
+          }
           parsed.devDependencies = {
             "@vitejs/plugin-react": "^4.3.4",
             "vite": "^5.4.14",
@@ -63,6 +71,15 @@ export async function createProjectZip(
   // Add package.json only if not already provided
   const hasPackageJson = files.some(f => f.name === "package.json" || f.name === "/package.json");
   if (!hasPackageJson) {
+    const detectedDeps: Record<string, string> = {};
+    for (const f of files) {
+      if (f.content) {
+        for (const pkg of scanCodeForImportedPackages(f.content)) {
+          detectedDeps[pkg] = sanitizePackageVersion(pkg, "latest");
+        }
+      }
+    }
+
     zip.file(
       "package.json",
       JSON.stringify(
@@ -79,7 +96,8 @@ export async function createProjectZip(
           dependencies: {
             react: "^18.3.1",
             "react-dom": "^18.3.1",
-            "lucide-react": "^0.475.0"
+            "lucide-react": "^0.475.0",
+            ...detectedDeps,
           },
           devDependencies: {
             "@vitejs/plugin-react": "^4.3.4",

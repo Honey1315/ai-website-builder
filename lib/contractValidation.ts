@@ -9,12 +9,34 @@ function sortProps(props: string[]): string[] {
   return [...props].sort();
 }
 
-function propsEqual(a: string[], b: string[]): boolean {
+export function propsEqual(a: string[], b: string[]): boolean {
   const sortedA = sortProps(a);
   const sortedB = sortProps(b);
 
   if (sortedA.length !== sortedB.length) return false;
   return sortedA.every((prop, index) => prop === sortedB[index]);
+}
+
+/**
+ * Checks if component accepts all expected contract props.
+ * Accepting extra props (e.g. enhancements or default options) is allowed and encouraged in React.
+ */
+export function fulfillsContractProps(expectedProps: string[], acceptedProps: string[]): boolean {
+  if (expectedProps.length === 0) return true;
+  const acceptedSet = new Set(acceptedProps);
+  return expectedProps.every((p) => acceptedSet.has(p));
+}
+
+/**
+ * Checks if props passed in JSX are compatible with the child component's accepted props.
+ * Any prop passed by the parent must be accepted by the child.
+ * The parent is NOT required to pass every optional/default prop accepted by the child.
+ */
+export function isUsageCompatible(passedProps: string[], acceptedProps: string[]): boolean {
+  if (passedProps.length === 0) return true;
+  if (acceptedProps.length === 0) return false;
+  const acceptedSet = new Set(acceptedProps);
+  return passedProps.every((p) => acceptedSet.has(p));
 }
 
 function getContractProps(manifest: ProjectManifest, componentName: string): string[] | undefined {
@@ -57,6 +79,20 @@ function doesProjectFileExist(targetPath: string, existingPaths: Set<string>): b
     clean.endsWith(".css")
   ) {
     return true;
+  }
+
+  // Flexible filename resolution: case-insensitive & root/src fallback
+  // e.g. target "src/components/AudioEngine", but file is "src/components/audioengine.jsx"
+  // or "src/AudioEngine.jsx"
+  const targetBase = clean.split("/").pop()?.toLowerCase();
+  if (targetBase) {
+    for (const existing of existingPaths) {
+      const existingClean = existing.replace(/^\/+/, "").replace(/\.(jsx|tsx|js|ts)$/i, "");
+      const existingBase = existingClean.split("/").pop()?.toLowerCase();
+      if (existingBase === targetBase) {
+        return true;
+      }
+    }
   }
 
   return false;
@@ -119,14 +155,14 @@ export function validateContracts(
     }
 
     const acceptedProps = metadata.componentProps[component.name] || [];
-    if (component.props.length > 0 && !propsEqual(acceptedProps, component.props)) {
+    if (component.props.length > 0 && !fulfillsContractProps(component.props, acceptedProps)) {
       mismatches.push({
         type: "prop_mismatch",
         childFile: filePath,
         component: component.name,
         expected: component.props,
         actual: acceptedProps,
-        message: `${component.name} contract expects props [${component.props.join(", ")}] but component accepts [${acceptedProps.join(", ")}].`,
+        message: `${component.name} contract expects props [${component.props.join(", ")}] but component is missing required props [${component.props.filter((p) => !acceptedProps.includes(p)).join(", ")}].`,
       });
     }
   }
@@ -136,14 +172,14 @@ export function validateContracts(
       const contractProps = getContractProps(manifest, usage.component);
       if (!contractProps) continue;
 
-      if (!propsEqual(usage.props, contractProps)) {
+      if (!isUsageCompatible(usage.props, contractProps)) {
         mismatches.push({
           type: "prop_mismatch",
           parentFile,
           component: usage.component,
           expected: contractProps,
           actual: usage.props,
-          message: `${parentFile} uses <${usage.component} /> with props [${usage.props.join(", ")}] but contract requires [${contractProps.join(", ")}].`,
+          message: `${parentFile} uses <${usage.component} /> with unrecognized props [${usage.props.filter((p) => !contractProps.includes(p)).join(", ")}].`,
         });
       }
 
@@ -164,7 +200,7 @@ export function validateContracts(
 
       if (childMetadata) {
         const childAccepted = childMetadata.componentProps[usage.component] || [];
-        if (childAccepted.length > 0 && !propsEqual(usage.props, childAccepted)) {
+        if (childAccepted.length > 0 && !isUsageCompatible(usage.props, childAccepted)) {
           mismatches.push({
             type: "prop_mismatch",
             parentFile,
@@ -172,7 +208,7 @@ export function validateContracts(
             component: usage.component,
             expected: childAccepted,
             actual: usage.props,
-            message: `${parentFile} passes props [${usage.props.join(", ")}] to ${usage.component} but ${childFile} accepts [${childAccepted.join(", ")}].`,
+            message: `${parentFile} passes unrecognized props [${usage.props.filter((p) => !childAccepted.includes(p)).join(", ")}] to ${usage.component}.`,
           });
         }
       }

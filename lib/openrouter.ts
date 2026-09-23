@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ModelProvider, ProviderOptions } from "@/types/ai";
 import { MODEL_CATALOG } from "@/utils/constants";
 import { isModelHealthy, tripModel, getUnhealthyModels } from "@/lib/circuitBreaker";
+import { withTimeout } from "@/lib/timeout";
 
 export type { ModelProvider, ProviderOptions } from "@/types/ai";
 
@@ -38,6 +39,8 @@ function getNvidiaClient(): OpenAI {
     nvidiaClient = new OpenAI({
       apiKey: getNvidiaApiKey() || "",
       baseURL: "https://integrate.api.nvidia.com/v1",
+      timeout: 35000,
+      maxRetries: 0,
     });
   }
   return nvidiaClient;
@@ -49,6 +52,8 @@ function getOpenRouterClient(): OpenAI {
     openRouterClient = new OpenAI({
       apiKey: getOpenRouterApiKey() || "",
       baseURL: "https://openrouter.ai/api/v1",
+      timeout: 35000,
+      maxRetries: 0,
     });
   }
   return openRouterClient;
@@ -181,7 +186,11 @@ export async function callOpenRouter(
         requestPayload.provider = { allow_fallbacks: true };
       }
 
-      const response = await getOpenRouterClient().chat.completions.create(requestPayload);
+      const response = await withTimeout(
+        getOpenRouterClient().chat.completions.create(requestPayload),
+        35000,
+        `OpenRouter request for "${primary}" timed out after 35s`
+      );
 
       // Detect which model actually served the request
       const servedBy: string = (response as any)?.model || primary;
@@ -228,14 +237,18 @@ export async function callOpenRouter(
     if (!isModelHealthy(candidate)) continue;
 
     try {
-      const response = await getNvidiaClient().chat.completions.create({
-        model: candidate,
-        messages,
-        temperature,
-        max_tokens: config.maxTokens,
-        top_p: config.top_p,
-        stream: false,
-      });
+      const response = await withTimeout(
+        getNvidiaClient().chat.completions.create({
+          model: candidate,
+          messages,
+          temperature,
+          max_tokens: config.maxTokens,
+          top_p: config.top_p,
+          stream: false,
+        }),
+        35000,
+        `NVIDIA request for "${candidate}" timed out after 35s`
+      );
 
       const content = extractResponseContent(response, candidate);
       if (content === null) {
@@ -268,14 +281,18 @@ async function openRouterFallbackLoop(
     if (!isModelHealthy(candidate)) continue;
 
     try {
-      const response = await getOpenRouterClient().chat.completions.create({
-        model: candidate,
-        messages,
-        temperature,
-        max_tokens: 8192,
-        top_p: 0.95,
-        stream: false,
-      });
+      const response = await withTimeout(
+        getOpenRouterClient().chat.completions.create({
+          model: candidate,
+          messages,
+          temperature,
+          max_tokens: 8192,
+          top_p: 0.95,
+          stream: false,
+        }),
+        35000,
+        `OpenRouter fallback request for "${candidate}" timed out after 35s`
+      );
 
       const content = extractResponseContent(response, candidate);
       if (content === null) {

@@ -2,6 +2,7 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 import type { ChatMessage } from "@/lib/openrouter";
 import { isModelHealthy, tripModel } from "@/lib/circuitBreaker";
 import { MODEL_CATALOG } from "@/utils/constants";
+import { withTimeout } from "@/lib/timeout";
 
 // ---------------------------------------------------------------------------
 // Gemini Client (singleton)
@@ -126,13 +127,21 @@ export async function callGemini(
       let result: string;
 
       if (priorHistory.length === 0) {
-        // Single-turn: just call generateContent directly
-        const response = await model.generateContent(lastMsg.parts[0].text);
+        // Single-turn: just call generateContent directly with 35s timeout
+        const response = await withTimeout(
+          model.generateContent(lastMsg.parts[0].text),
+          35000,
+          `Gemini model "${modelId}" timed out after 35s`
+        );
         result = response.response.text();
       } else {
-        // Multi-turn: use a chat session
+        // Multi-turn: use a chat session with 35s timeout
         const chat = model.startChat({ history: priorHistory });
-        const response = await chat.sendMessage(lastMsg.parts[0].text);
+        const response = await withTimeout(
+          chat.sendMessage(lastMsg.parts[0].text),
+          35000,
+          `Gemini model "${modelId}" timed out after 35s`
+        );
         result = response.response.text();
       }
 
@@ -146,9 +155,14 @@ export async function callGemini(
     } catch (err: any) {
       console.warn(`[Gemini] Model "${modelId}" failed:`, err?.message || err);
 
-      // Trip the model on quota/rate-limit errors so the circuit breaker
+      // Trip the model on quota/rate-limit or timeout errors so the circuit breaker
       // routes around it for the configured cooldown window
-      if (err?.status === 429 || err?.status === 503 || err?.message?.includes("quota")) {
+      if (
+        err?.status === 429 ||
+        err?.status === 503 ||
+        err?.message?.includes("quota") ||
+        err?.message?.includes("timed out")
+      ) {
         tripModel(modelId, err);
       }
 

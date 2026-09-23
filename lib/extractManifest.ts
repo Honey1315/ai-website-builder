@@ -5,6 +5,7 @@ import {
   ProjectManifest,
   ProjectPackages,
 } from "@/types/contract";
+import { sanitizeDependencies } from "./dependencySanitizer";
 
 const DEFAULT_FILES = [
   "src/App.jsx"
@@ -94,13 +95,7 @@ function normalizePackages(
   if (!deps || typeof deps !== "object" || Array.isArray(deps)) {
     return { dependencies: {} };
   }
-  const dependencies: Record<string, string> = {};
-  Object.entries(deps as Record<string, unknown>).forEach(([name, version]) => {
-    if (typeof version === "string") {
-      dependencies[name] = version;
-    }
-  });
-  return { dependencies };
+  return { dependencies: sanitizeDependencies(deps as Record<string, unknown>) };
 }
 
 function normalizeFilePaths(files: unknown): string[] {

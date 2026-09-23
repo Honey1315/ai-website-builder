@@ -47,6 +47,7 @@ export interface RefineRequest {
 export interface RefineResponse {
   code: string;
   files?: FileData[];
+  manifest?: ProjectManifest;
   summary?: string;
   error?: string;
 }
@@ -86,7 +87,7 @@ export type RefineStreamEvent =
   | { type: "targets"; files: string[] }
   | { type: "file"; file: FileData; index: number; total: number }
   | { type: "fixing"; files: string[] }
-  | { type: "done"; code: string; files: FileData[]; summary: string }
+  | { type: "done"; code: string; files: FileData[]; manifest?: ProjectManifest; summary: string }
   | { type: "error"; error: string };
 
 export type { ProjectManifest, FileMetadata, ValidationMismatch } from "@/types/contract";

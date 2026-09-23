@@ -24,6 +24,7 @@ import { downloadProjectZip } from "@/lib/zipExporter";
 type RefineApiResponse = {
   code?: string;
   files?: FileData[];
+  manifest?: ProjectManifest;
   summary?: string;
   error?: string;
 };
@@ -36,11 +37,22 @@ function mergeFile(files: FileData[], nextFile: FileData) {
   return updatedFiles;
 }
 
-function RefineWaitingStatus({ status }: { status?: string }) {
+function RefineWaitingStatus({ status, onStop }: { status?: string; onStop?: () => void }) {
   return (
-    <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center gap-4 shrink-0">
-      <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent animate-spin rounded-none"></div>
-      <span>{status || "[SYS] Refining code architecture..."}</span>
+    <div className="border border-primary-500/30 bg-primary-500/5 text-primary-400 p-4 font-mono text-xs uppercase tracking-widest flex items-center justify-between gap-4 shrink-0">
+      <div className="flex items-center gap-4">
+        <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent animate-spin rounded-none"></div>
+        <span>{status || "[SYS] Refining code architecture..."}</span>
+      </div>
+      {onStop && (
+        <button
+          onClick={onStop}
+          className="border border-danger-500/60 bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 px-3 py-1 font-mono text-[10px] tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+        >
+          <span className="w-1.5 h-1.5 bg-danger-500 rounded-none inline-block"></span>
+          STOP
+        </button>
+      )}
     </div>
   );
 }
@@ -82,6 +94,24 @@ function BuilderPageInner() {
   const [isExporting, setIsExporting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancel = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+    setRefining(false);
+    setGenerationStatus("");
+    setRefineStatus("");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Click outside and escape key handling for builder menu
   useEffect(() => {
@@ -283,6 +313,11 @@ function BuilderPageInner() {
   }, [urlProjectId, router]);
 
   const generateCode = async (prompt: string) => {
+    // Abort any existing running request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError("");
     setSandpackError(null);
@@ -298,6 +333,7 @@ function BuilderPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({ prompt, provider, model }),
+        signal: controller.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -378,15 +414,27 @@ function BuilderPageInner() {
         }
         if (done) break;
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if ((err as Error)?.name === "AbortError") {
+        setGenerationStatus("Generation stopped by user.");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
       setCode("");
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setLoading(false);
     }
   };
 
   const refineCode = async (message: string) => {
+    // Abort any existing running request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setError("");
     setSandpackError(null);
     setRefining(true);
@@ -420,6 +468,7 @@ function BuilderPageInner() {
           provider,
           model,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -465,6 +514,7 @@ function BuilderPageInner() {
             } else if (event.type === "done") {
               if (event.code) setCode(event.code);
               if (event.files && event.files.length > 0) setFiles(event.files);
+              if (event.manifest) setManifest(event.manifest);
               setChatMessages((prev) => [
                 ...prev,
                 {
@@ -486,6 +536,7 @@ function BuilderPageInner() {
         if (data.error) throw new Error(data.error);
 
         if (data.code) setCode(data.code);
+        if (data.manifest) setManifest(data.manifest);
 
         if (data.files && data.files.length > 0) {
           setFiles((currentFiles) => {
@@ -509,7 +560,19 @@ function BuilderPageInner() {
           },
         ]);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if ((err as Error)?.name === "AbortError") {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "[STOPPED] Refinement cancelled by user.",
+            timestamp: Date.now(),
+          },
+        ]);
+        return;
+      }
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       setError(errorMsg);
       setChatMessages((prev) => [
@@ -522,6 +585,9 @@ function BuilderPageInner() {
         },
       ]);
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setRefining(false);
       setRefineStatus("");
     }
@@ -959,6 +1025,7 @@ function BuilderPageInner() {
             </h3>
             <ChatPanel
               onSend={refineCode}
+              onStop={handleCancel}
               error={sandpackError}
               isAuthenticated={!!user}
               messages={chatMessages}
@@ -980,16 +1047,26 @@ function BuilderPageInner() {
           )}
 
           {loading && (
-            <div className="border border-secondary-700 bg-secondary-800/30 p-4 flex items-start gap-4 shrink-0">
-              <div className="w-4 h-4 border border-primary-400 border-t-transparent animate-spin rounded-none mt-0.5"></div>
-              <div className="font-mono text-xs tracking-widest uppercase text-secondary-300">
-                <span className="text-primary-400 block mb-1">[SYS_EXECUTION]</span>
-                {generationStatus || "Executing generation sequence..."}
+            <div className="border border-secondary-700 bg-secondary-800/30 p-4 flex items-center justify-between gap-4 shrink-0">
+              <div className="flex items-start gap-4">
+                <div className="w-4 h-4 border border-primary-400 border-t-transparent animate-spin rounded-none mt-0.5"></div>
+                <div className="font-mono text-xs tracking-widest uppercase text-secondary-300">
+                  <span className="text-primary-400 block mb-1">[SYS_EXECUTION]</span>
+                  {generationStatus || "Executing generation sequence..."}
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="border border-danger-500/60 bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <span className="w-1.5 h-1.5 bg-danger-500 rounded-none inline-block"></span>
+                STOP
+              </button>
             </div>
           )}
 
-          {refining && <RefineWaitingStatus status={refineStatus} />}
+          {refining && <RefineWaitingStatus status={refineStatus} onStop={handleCancel} />}
 
           {manifest && (
             <div className="border border-secondary-800 bg-secondary-900/50 p-6 font-mono text-xs text-secondary-400 shrink-0 relative">
