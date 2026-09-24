@@ -90,11 +90,11 @@ export default function PromptInput({
                 key={i}
                 type="button"
                 onClick={() => setPrompt(example)}
-                className="text-left text-[10px] font-mono text-secondary-400 hover:text-primary-400 border border-secondary-800 hover:border-primary-500/50 bg-[#0a0f16] hover:bg-primary-500/5 px-3 py-2 transition-all duration-150 line-clamp-1 cursor-pointer rounded-none"
+                className="w-full flex items-center text-left text-[10px] font-mono text-secondary-400 hover:text-primary-400 border border-secondary-800 hover:border-primary-500/50 bg-[#0a0f16] hover:bg-primary-500/5 px-3 py-2 transition-all duration-150 cursor-pointer rounded-none group min-w-0 overflow-hidden"
                 title={example}
               >
-                <span className="text-primary-500/60 mr-1.5">#{i + 1}</span>
-                {example}
+                <span className="text-primary-500/60 group-hover:text-primary-400 mr-2 shrink-0 font-medium">#{i + 1}</span>
+                <span className="truncate min-w-0 flex-1">{example}</span>
               </button>
             ))}
           </div>
