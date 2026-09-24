@@ -94,11 +94,134 @@ function BuilderPageInner() {
   type MobileView = "chat" | "preview" | "code";
   const [mobileView, setMobileView] = useState<MobileView>("chat");
 
+  interface SavedDraftData {
+    files: FileData[];
+    originalPrompt: string;
+    code?: string;
+    manifest?: ProjectManifest | null;
+    messages?: ChatMessage[];
+    provider?: ModelProvider;
+    model?: string;
+    timestamp?: number;
+  }
+  const [pendingDraft, setPendingDraft] = useState<SavedDraftData | null>(null);
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // ─── Version History (Undo / Redo) ────────────────────────────────────────
+  const MAX_HISTORY = 50;
+  interface HistorySnapshot { files: FileData[]; code: string; label: string; }
+  const historyStack = useRef<HistorySnapshot[]>([]);
+  const historyPointer = useRef<number>(-1);
+  const skipNextPush = useRef(false); // prevent undo/redo itself from pushing
+
+  const pushHistory = useCallback((newFiles: FileData[], newCode: string, label: string) => {
+    if (skipNextPush.current) { skipNextPush.current = false; return; }
+    // Truncate any redo future
+    historyStack.current = historyStack.current.slice(0, historyPointer.current + 1);
+    // Push new snapshot (deep-clone files to decouple reference)
+    historyStack.current.push({
+      files: newFiles.map((f) => ({ ...f })),
+      code: newCode,
+      label,
+    });
+    // Cap to MAX_HISTORY
+    if (historyStack.current.length > MAX_HISTORY) {
+      historyStack.current = historyStack.current.slice(historyStack.current.length - MAX_HISTORY);
+    }
+    historyPointer.current = historyStack.current.length - 1;
+  }, []);
+
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const syncUndoRedoState = useCallback(() => {
+    setCanUndo(historyPointer.current > 0);
+    setCanRedo(historyPointer.current < historyStack.current.length - 1);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (historyPointer.current <= 0) return;
+    historyPointer.current -= 1;
+    const snap = historyStack.current[historyPointer.current];
+    skipNextPush.current = true;
+    setFiles(snap.files.map((f) => ({ ...f })));
+    setCode(snap.code);
+    syncUndoRedoState();
+    setDraftNotification(`Undid: ${snap.label}`);
+    setTimeout(() => setDraftNotification(""), 3000);
+  }, [syncUndoRedoState]);
+
+  const handleRedo = useCallback(() => {
+    if (historyPointer.current >= historyStack.current.length - 1) return;
+    historyPointer.current += 1;
+    const snap = historyStack.current[historyPointer.current];
+    skipNextPush.current = true;
+    setFiles(snap.files.map((f) => ({ ...f })));
+    setCode(snap.code);
+    syncUndoRedoState();
+    setDraftNotification(`Redid: ${snap.label}`);
+    setTimeout(() => setDraftNotification(""), 3000);
+  }, [syncUndoRedoState]);
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z = redo
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      if (!isCtrl) return;
+      if (e.key === "z" && !e.shiftKey) {
+        const active = document.activeElement;
+        const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable;
+        if (isInput) return; // let CodeEditor / textarea handle its own undo
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
+        const active = document.activeElement;
+        const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable;
+        if (isInput) return;
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo, handleRedo]);
+
+  const handleRestoreDraft = useCallback((draft: SavedDraftData) => {
+    setFiles(draft.files);
+    setCode(draft.code || "");
+    setOriginalPrompt(draft.originalPrompt || "");
+    if (draft.manifest) setManifest(draft.manifest);
+    if (draft.messages && draft.messages.length > 0) {
+      setChatMessages(draft.messages);
+    }
+    if (draft.provider) setProvider(draft.provider);
+    if (draft.model) setModel(draft.model);
+
+    const placeholders = draft.files.filter(isPlaceholderFile);
+    if (placeholders.length > 0) {
+      setIsPartialGeneration(true);
+      setRemainingFiles(placeholders.map((p: FileData) => p.name));
+      setDraftNotification("Unsaved partial project restored! You can resume generation or refine components.");
+    } else {
+      setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
+    }
+    setTimeout(() => setDraftNotification(""), 7000);
+    setPendingDraft(null);
+  }, []);
+
+  const handleDiscardDraft = useCallback(() => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("ai_builder_draft");
+    }
+    setPendingDraft(null);
+    setDraftNotification("Unsaved draft deleted.");
+    setTimeout(() => setDraftNotification(""), 4000);
+  }, []);
 
   const saveDraftToStorage = useCallback(
     (
@@ -186,18 +309,24 @@ function BuilderPageInner() {
       const index = prevFiles.findIndex(
         (f) => f.name.replace(/^\//, "") === normalized
       );
+      let nextFiles: FileData[];
       if (index === -1) {
-        return [...prevFiles, { name: normalized, content: updatedCode }];
+        nextFiles = [...prevFiles, { name: normalized, content: updatedCode }];
+      } else {
+        const updated = [...prevFiles];
+        updated[index] = { ...updated[index], content: updatedCode };
+        nextFiles = updated;
       }
-      const updated = [...prevFiles];
-      updated[index] = { ...updated[index], content: updatedCode };
-      return updated;
+      const nextCode = (normalized === "src/App.jsx" || normalized.endsWith("App.jsx")) ? updatedCode : code;
+      pushHistory(nextFiles, nextCode, `Edit ${normalized.split("/").pop()}`);
+      syncUndoRedoState();
+      return nextFiles;
     });
 
     if (normalized === "src/App.jsx" || normalized.endsWith("App.jsx")) {
       setCode(updatedCode);
     }
-  }, []);
+  }, [code, pushHistory, syncUndoRedoState]);
 
   const handleExportZip = async () => {
     if (files.length === 0 || isExporting) return;
@@ -242,41 +371,27 @@ function BuilderPageInner() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Restore unsaved draft on load if present
+  // Check for unsaved draft on load if present and ask user before restoring
   useEffect(() => {
     if (typeof window === "undefined") return;
     const restoreDraft = searchParams.get("restoreDraft");
     const savedDraft = localStorage.getItem("ai_builder_draft");
 
-    if (savedDraft && (restoreDraft === "true" || !urlProjectId)) {
+    if (savedDraft && !urlProjectId) {
       try {
         const parsed = JSON.parse(savedDraft);
         if (parsed.files && parsed.files.length > 0) {
-          setFiles(parsed.files);
-          setCode(parsed.code || "");
-          setOriginalPrompt(parsed.originalPrompt || "");
-          if (parsed.manifest) setManifest(parsed.manifest);
-          if (parsed.messages && parsed.messages.length > 0) {
-            setChatMessages(parsed.messages);
-          }
-          if (parsed.provider) setProvider(parsed.provider);
-          if (parsed.model) setModel(parsed.model);
-
-          const placeholders = parsed.files.filter(isPlaceholderFile);
-          if (placeholders.length > 0) {
-            setIsPartialGeneration(true);
-            setRemainingFiles(placeholders.map((p: FileData) => p.name));
-            setDraftNotification("Unsaved partial project restored! You can resume generation or refine components.");
+          if (restoreDraft === "true") {
+            handleRestoreDraft(parsed);
           } else {
-            setDraftNotification("Your unsaved draft has been restored! Click 'Save Project' to save it to your account.");
+            setPendingDraft(parsed);
           }
-          setTimeout(() => setDraftNotification(""), 7000);
         }
       } catch (e) {
-        console.error("Failed to restore draft:", e);
+        console.error("Failed to parse saved draft:", e);
       }
     }
-  }, [searchParams, urlProjectId]);
+  }, [searchParams, urlProjectId, handleRestoreDraft]);
 
   // Load existing project when URL has ?projectId=
   useEffect(() => {
@@ -325,13 +440,13 @@ function BuilderPageInner() {
           initialMessages = [
             ...(loadedPrompt
               ? [
-                  {
-                    id: crypto.randomUUID(),
-                    role: "user" as const,
-                    content: loadedPrompt,
-                    timestamp: project.createdAt ? new Date(project.createdAt).getTime() : Date.now(),
-                  },
-                ]
+                {
+                  id: crypto.randomUUID(),
+                  role: "user" as const,
+                  content: loadedPrompt,
+                  timestamp: project.createdAt ? new Date(project.createdAt).getTime() : Date.now(),
+                },
+              ]
               : []),
             {
               id: crypto.randomUUID(),
@@ -411,14 +526,14 @@ function BuilderPageInner() {
     try {
       const payload = isResume
         ? {
-            prompt: originalPrompt || prompt,
-            provider,
-            model,
-            resume: true,
-            existingFiles: files,
-            manifest,
-            structure: projectStructure,
-          }
+          prompt: originalPrompt || prompt,
+          provider,
+          model,
+          resume: true,
+          existingFiles: files,
+          manifest,
+          structure: projectStructure,
+        }
         : { prompt, provider, model };
 
       const res = await fetch("/api/generate", {
@@ -520,6 +635,10 @@ function BuilderPageInner() {
           setIsPartialGeneration(false);
           setRemainingFiles([]);
           setGenerationStatus(`Generated ${event.files.length} files.`);
+          // Push generation snapshot to history
+          const genCode = event.code || "";
+          pushHistory(event.files, genCode, `Generated (${event.files.length} files)`);
+          syncUndoRedoState();
           const userMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: "user",
@@ -663,7 +782,12 @@ function BuilderPageInner() {
               setRefineStatus(`Auto-fixing ${event.files.length} file(s)...`);
             } else if (event.type === "done") {
               if (event.code) setCode(event.code);
-              if (event.files && event.files.length > 0) setFiles(event.files);
+              if (event.files && event.files.length > 0) {
+                setFiles(event.files);
+                // Push refinement snapshot to history
+                pushHistory(event.files, event.code || code, `Refined (${event.files.length} files)`);
+                syncUndoRedoState();
+              }
               if (event.manifest) setManifest(event.manifest);
               setChatMessages((prev) => [
                 ...prev,
@@ -904,6 +1028,7 @@ function BuilderPageInner() {
                 </span>
               )}
 
+
               {/* Three horizontal parallel lines menu button */}
               <div className="relative">
                 <button
@@ -1124,6 +1249,89 @@ function BuilderPageInner() {
         </div>
       )}
 
+      {/* Unsaved Project Restore Confirmation Modal */}
+      {pendingDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05080c]/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-[#0a0f16] border border-secondary-800 shadow-2xl p-6 sm:p-7 flex flex-col gap-5 text-left">
+            {/* Corner tech accent */}
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-60 pointer-events-none"></div>
+
+            {/* Header */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-primary-400">
+                <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
+                <span>SYS_SESSION_RECOVERY // DRAFT DETECTED</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-display text-white font-medium">
+                Restore Unsaved Project?
+              </h3>
+              <p className="text-xs text-secondary-400 font-light leading-relaxed">
+                We detected an unsaved project draft from your previous session. Would you like to restore your files and conversation, or discard this draft and start fresh?
+              </p>
+            </div>
+
+            {/* Draft Details Card */}
+            <div className="bg-[#05080c] border border-secondary-800/80 p-3.5 space-y-2 font-mono text-xs">
+              <div className="text-[10px] text-secondary-500 uppercase tracking-wider flex justify-between items-center border-b border-secondary-800/60 pb-1.5">
+                <span>DRAFT SUMMARY</span>
+                {pendingDraft.timestamp && (
+                  <span className="text-secondary-400">
+                    {new Date(pendingDraft.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                  </span>
+                )}
+              </div>
+
+              {pendingDraft.originalPrompt ? (
+                <div className="text-secondary-200 text-xs italic break-words line-clamp-3">
+                  &quot;{pendingDraft.originalPrompt}&quot;
+                </div>
+              ) : (
+                <div className="text-secondary-500 text-xs">
+                  Untitled Project
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-[10px] text-secondary-400 border-t border-secondary-800/40">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1 h-1 bg-primary-400 rounded-full"></span>
+                  {pendingDraft.files.length} Files Preserved
+                </span>
+                {pendingDraft.model && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1 h-1 bg-secondary-500 rounded-full"></span>
+                    Model: {pendingDraft.model}
+                  </span>
+                )}
+                {pendingDraft.files.some(isPlaceholderFile) && (
+                  <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">
+                    Partial Generation
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="w-full sm:w-auto px-4 py-2.5 border border-secondary-700 bg-secondary-900/60 hover:bg-danger-500/10 hover:border-danger-500 text-secondary-400 hover:text-danger-400 font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel &amp; Delete Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRestoreDraft(pendingDraft)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-secondary-950 font-bold font-mono text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg shadow-primary-500/20 flex items-center justify-center gap-2"
+              >
+                <span>Restore Project</span>
+                <span>↗</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <DeployModal
         isOpen={isDeployModalOpen}
         onClose={() => setIsDeployModalOpen(false)}
@@ -1153,7 +1361,7 @@ function BuilderPageInner() {
       )}
 
       {/* Main Layout - Split Panel Design */}
-      <div className="flex-1 flex flex-col lg:flex-row relative z-0">
+      <div className="flex-1 flex flex-col lg:flex-row relative min-h-0">
 
         {/* Left Sidebar (Generate & Chat) */}
         <div className={`w-full lg:w-105 flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto ${mobileView === "chat" ? "flex flex-1 lg:flex-initial" : "hidden lg:flex"
@@ -1282,34 +1490,6 @@ function BuilderPageInner() {
 
           {refining && <RefineWaitingStatus status={refineStatus} onStop={handleCancel} />}
 
-          {manifest && (
-            <div className="border border-secondary-800 bg-secondary-900/50 p-6 font-mono text-xs text-secondary-400 shrink-0 relative">
-              <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-600 opacity-50"></div>
-              <div className="text-primary-400 uppercase tracking-widest mb-4 border-b border-secondary-800 pb-3 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
-                Project Manifest
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                <div>
-                  <span className="text-secondary-600 block mb-2 uppercase tracking-widest text-[10px]">Registered Components</span>
-                  <div className="leading-relaxed">
-                    {manifest && manifest.components.length > 0
-                      ? manifest.components
-                          .map((c) => `${c.name}(${c.props.join(", ")})`)
-                          .join(" · ")
-                      : "None"}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-secondary-600 block mb-2 uppercase tracking-widest text-[10px]">Architecture Stack</span>
-                  <div className="leading-relaxed">
-                    [{manifest.architecture?.framework ?? 'react'}] / [{manifest.architecture?.language ?? 'javascript'}] / [{manifest.architecture?.styling ?? 'css'}]
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className={`w-full flex-1 flex flex-col min-h-0 relative ${isLoadingProject ? "hidden" : "flex"}`}>
             <SandpackWrapper
               code={code}
@@ -1317,19 +1497,30 @@ function BuilderPageInner() {
               dependencies={manifest?.packages.dependencies || {}}
               onErrorChange={setSandpackError}
             >
-              <div className="w-full flex flex-col gap-4 sm:gap-6">
+              <div className="w-full flex-1 h-full min-h-0 flex flex-col gap-4 sm:gap-6">
                 {/* Editor Section */}
-                <div className={`w-full h-[480px] xl:h-[540px] flex flex-col md:flex-row gap-3 sm:gap-4 shrink-0 ${mobileView === "preview" ? "hidden lg:flex" : "flex"
+                <div className={`w-full flex flex-col md:flex-row gap-3 sm:gap-4 min-h-0 ${mobileView === "preview"
+                  ? "hidden lg:flex lg:h-[480px] xl:h-[540px] shrink-0"
+                  : "flex flex-1 h-full min-h-[480px] lg:flex-none lg:h-[480px] xl:h-[540px]"
                   }`}>
                   <div className="h-48 sm:h-56 md:h-full md:flex-[2_2_0%] min-w-0 shrink-0">
                     <SandpackFileExplorer />
                   </div>
-                  <div className="flex-1 md:h-full md:flex-[8_8_0%] min-w-0 border border-secondary-800 bg-[#05080c] shrink-0">
-                    <CodeEditor onSaveFile={handleFileSave} onSave={setCode} />
+                  <div className="h-[450px] sm:h-[440px] md:h-full flex-none md:flex-[8_8_0%] min-w-0 border border-secondary-800 bg-[#05080c] flex flex-col overflow-hidden">
+                    <CodeEditor
+                      onSaveFile={handleFileSave}
+                      onSave={setCode}
+                      onUndo={handleUndo}
+                      onRedo={handleRedo}
+                      canUndo={canUndo}
+                      canRedo={canRedo}
+                    />
                   </div>
                 </div>
                 {/* Preview Section */}
-                <div className={`w-full h-[580px] xl:h-[680px] shrink-0 border border-secondary-800 bg-white relative ${mobileView === "code" ? "hidden lg:block" : "block"
+                <div className={`w-full border border-secondary-800 bg-[#05080c] relative flex flex-col min-h-0 ${mobileView === "code"
+                  ? "hidden lg:block lg:h-[580px] xl:h-[680px] shrink-0"
+                  : "block flex-1 h-full min-h-[580px] lg:flex-none lg:h-[580px] xl:h-[680px]"
                   }`}>
                   <PreviewPanel error={sandpackError} onAutoFix={refineCode} />
                 </div>

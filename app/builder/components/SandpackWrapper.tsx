@@ -502,17 +502,37 @@ export default function SandpackWrapper({
   );
 
   return (
-    <SandpackProvider
-      template="react"
-      files={sandpackFiles}
-      customSetup={customSetup}
-      theme={customTheme}
-      options={sandpackOptions}
-    >
-      <SandpackErrorObserver onErrorChange={onErrorChange} />
-      <SandpackLayout style={{ height: "100%", background: "transparent", border: "none", borderRadius: 0 }}>
-        {children}
-      </SandpackLayout>
-    </SandpackProvider>
+    <div className="sandpack-full-root w-full flex-1 flex flex-col min-h-0 h-full">
+      <style dangerouslySetInnerHTML={{
+        __html: `
+    .sandpack-full-root,
+    .sandpack-full-root > div,
+    .sandpack-full-root .sp-wrapper,
+    .sandpack-full-root .sp-layout,
+    .sandpack-full-root .sp-preview,
+    .sandpack-full-root .sp-preview-container,
+    .sandpack-full-root .sp-preview-iframe,
+    .sandpack-full-root iframe {
+      height: 100% !important;
+      flex: 1 1 0% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+      border: none !important;
+    }
+  `}} />
+      <SandpackProvider
+        template="react"
+        files={sandpackFiles}
+        customSetup={customSetup}
+        theme={customTheme}
+        options={sandpackOptions}
+      >
+        <SandpackErrorObserver onErrorChange={onErrorChange} />
+        <SandpackLayout style={{ minHeight: "100%", height: "100%", width: "100%", display: "flex", flexDirection: "column", flex: 1, background: "transparent", border: "none", borderRadius: 0 }}>
+          {children}
+        </SandpackLayout>
+      </SandpackProvider>
+    </div>
   );
 }

@@ -129,7 +129,7 @@ export default defineConfig({
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-primary-500/30 bg-primary-500/5 text-[10px] sm:text-xs font-mono uppercase tracking-[0.18em] text-primary-400">
                 <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
-                <span>SYS_V3.0 // AUTONOMOUS REACT ENGINE</span>
+                <span>SYS_V3.5 // MULTI-MODEL AUTONOMOUS REACT ENGINE</span>
               </div>
 
               {/* Main Headline */}
@@ -144,7 +144,8 @@ export default defineConfig({
               {/* Subtitle */}
               <p className="text-xs sm:text-base md:text-lg text-secondary-400 font-light leading-relaxed max-w-2xl">
                 Transform natural language prompts into modular, multi-file Vite + React + Tailwind applications in seconds.
-                Test in an in-browser live Sandpack sandbox, resolve glitches with self-healing AI error diagnostics, and deploy to GitHub and Vercel with a single click.
+                Powered by Google Gemini, OpenRouter, and NVIDIA with intelligent fallbacks. Test in an in-browser live Sandpack sandbox,
+                resume partial builds on demand, auto-heal runtime glitches, and deploy to GitHub and Vercel with one click.
               </p>
             </div>
 
@@ -175,18 +176,18 @@ export default defineConfig({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-secondary-800/80">
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
-                  &lt; 3<span className="text-primary-400 text-base sm:text-lg">s</span>
+                  &lt; 1.5<span className="text-primary-400 text-base sm:text-lg">s</span>
                 </div>
                 <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
-                  Sandpack HMR Live
+                  Sandpack Live HMR
                 </div>
               </div>
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
-                  Tailwind
+                  React 19
                 </div>
                 <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
-                  V3 Vite Stack
+                  Tailwind & Lucide
                 </div>
               </div>
               <div className="p-2 sm:p-0">
@@ -199,10 +200,10 @@ export default defineConfig({
               </div>
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
-                  Dual Engine
+                  Tri-Model
                 </div>
                 <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
-                  NVIDIA & OpenRouter
+                  Gemini, OR & NVIDIA
                 </div>
               </div>
             </div>
@@ -277,7 +278,7 @@ export default defineConfig({
                     </div>
                     <div className="space-y-1.5 font-mono text-[10px] sm:text-[11px]">
                       <div className="flex justify-between items-center text-secondary-400">
-                        <span className="truncate pr-2">[1] Model Engine: NVIDIA Nemotron-3</span>
+                        <span className="truncate pr-2">[1] Model Engine: Google Gemini 3.6 / OpenRouter</span>
                         <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ENGAGED</span>
                       </div>
                       <div className="flex justify-between items-center text-secondary-400">
@@ -285,11 +286,11 @@ export default defineConfig({
                         <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">5 FILES</span>
                       </div>
                       <div className="flex justify-between items-center text-secondary-400">
-                        <span className="truncate pr-2">[3] Sandpack Nodebox In-Browser HMR</span>
+                        <span className="truncate pr-2">[3] Fast Sandpack React Sandbox</span>
                         <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ACTIVE</span>
                       </div>
                       <div className="flex justify-between items-center text-secondary-400">
-                        <span className="truncate pr-2">[4] Frame Boundary Error Interceptor</span>
+                        <span className="truncate pr-2">[4] Dependency Sanitizer &amp; Error Interceptor</span>
                         <span className="text-primary-400 text-[9px] sm:text-[10px] shrink-0">ARMED</span>
                       </div>
                       <div className="flex justify-between items-center text-secondary-400">
@@ -390,7 +391,7 @@ export default defineConfig({
                     </div>
 
                     <div className="text-[10px] text-secondary-400 flex items-center justify-between pt-1">
-                      <span className="font-mono text-[9px] text-secondary-500">Nodebox Virtual Vite Active</span>
+                      <span className="font-mono text-[9px] text-secondary-500">Live Virtual Sandbox Active</span>
                       <span className="text-primary-400 font-mono text-[9px]">Responsive 100%</span>
                     </div>
                   </div>
@@ -437,8 +438,8 @@ export default defineConfig({
 
               {/* Status bar */}
               <div className="border-t border-secondary-800/80 pt-2.5 flex items-center justify-between text-[9px] sm:text-[10px] font-mono text-secondary-500">
-                <span>VITE + REACT + TAILWIND V3</span>
-                <span className="text-primary-400">AUTO_HEALING_ACTIVE</span>
+                <span>VITE + REACT + TAILWIND</span>
+                <span className="text-primary-400">AUTO_HEALING_&amp;_RESUME_READY</span>
               </div>
             </div>
           </div>
@@ -449,45 +450,63 @@ export default defineConfig({
       <div className="w-full border-y border-secondary-800 bg-[#070c12] py-2.5 sm:py-3 overflow-hidden">
         <div className="animate-marquee whitespace-nowrap text-[10px] sm:text-xs font-mono uppercase tracking-[0.22em] text-secondary-400">
           <span className="mx-4 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-primary-400"></span> NVIDIA NIM &amp; OPENROUTER ENGINES
+            <span className="w-1.5 h-1.5 bg-primary-400"></span> GOOGLE GEMINI • OPENROUTER • NVIDIA ENGINES
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
             <span>+</span> MULTI-FILE REACT ARCHITECTURE
           </span>
           <span className="mx-4 flex items-center gap-2">
-            <span>+</span> SANDPACK IN-BROWSER SANDBOX
+            <span>+</span> FAST SANDPACK IN-BROWSER SANDBOX
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> PARTIAL GENERATION PRESERVATION &amp; RESUME
+          </span>
+          <span className="mx-4 flex items-center gap-2">
             <span>+</span> SELF-HEALING AI ERROR DIAGNOSTICS
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> FULLSCREEN MODAL &amp; NEW TAB POP-OUT
           </span>
           <span className="mx-4 flex items-center gap-2">
             <span>+</span> 1-CLICK VERCEL &amp; GITHUB DEPLOYMENT
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
-            <span>+</span> STANDALONE NPM ZIP EXPORT
+            <span>+</span> DEPENDENCY AUTO-SANITIZER
           </span>
           <span className="mx-4 flex items-center gap-2">
+            <span>+</span> STANDALONE NPM ZIP EXPORT
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
             <span>+</span> SUPABASE PERSISTENT WORKSPACES
           </span>
           <span className="mx-4 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-primary-400"></span> NVIDIA NIM &amp; OPENROUTER ENGINES
+            <span className="w-1.5 h-1.5 bg-primary-400"></span> GOOGLE GEMINI • OPENROUTER • NVIDIA ENGINES
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
             <span>+</span> MULTI-FILE REACT ARCHITECTURE
           </span>
           <span className="mx-4 flex items-center gap-2">
-            <span>+</span> SANDPACK IN-BROWSER SANDBOX
+            <span>+</span> FAST SANDPACK IN-BROWSER SANDBOX
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> PARTIAL GENERATION PRESERVATION &amp; RESUME
+          </span>
+          <span className="mx-4 flex items-center gap-2">
             <span>+</span> SELF-HEALING AI ERROR DIAGNOSTICS
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
+            <span>+</span> FULLSCREEN MODAL &amp; NEW TAB POP-OUT
           </span>
           <span className="mx-4 flex items-center gap-2">
             <span>+</span> 1-CLICK VERCEL &amp; GITHUB DEPLOYMENT
           </span>
           <span className="mx-4 flex items-center gap-2 text-primary-300">
-            <span>+</span> STANDALONE NPM ZIP EXPORT
+            <span>+</span> DEPENDENCY AUTO-SANITIZER
           </span>
           <span className="mx-4 flex items-center gap-2">
+            <span>+</span> STANDALONE NPM ZIP EXPORT
+          </span>
+          <span className="mx-4 flex items-center gap-2 text-primary-300">
             <span>+</span> SUPABASE PERSISTENT WORKSPACES
           </span>
         </div>
@@ -521,50 +540,50 @@ export default defineConfig({
               {
                 id: "02",
                 title: "Live Sandpack Sandbox",
-                description: "Experience your application in real-time inside an in-browser Vite virtual filesystem. Switch between desktop, tablet, and mobile viewports seamlessly.",
+                description: "Experience your application in real-time inside an in-browser live virtual filesystem. Switch between desktop, tablet, and mobile viewports, or launch into Fullscreen and New Tab.",
                 badge: "HMR SANDBOX",
               },
               {
                 id: "03",
-                title: "Self-Healing AI Diagnostics",
-                description: "Frame-boundary interceptors catch runtime evaluation errors and syntax hiccups. One-click AI quick-fix heals the codebase automatically with full context.",
-                badge: "AUTO-FIX",
+                title: "Partial Generation & Resume",
+                description: "Never lose code to quota limits or timeouts. Completed files are preserved, drafts auto-save to storage, and you can resume missing files in a single click.",
+                badge: "RESUME ENGINE",
               },
               {
                 id: "04",
-                title: "1-Click GitHub & Vercel Deploy",
-                description: "Auto-saves unsaved work, creates a personal GitHub repository, and triggers production edge builds on Vercel with dedicated domain links.",
-                badge: "PRODUCTION DEPLOY",
+                title: "Self-Healing AI Diagnostics",
+                description: "Frame-boundary interceptors catch runtime evaluation errors and syntax hiccups. One-click AI quick-fix heals the codebase automatically with full stack trace diagnostics.",
+                badge: "AUTO-FIX",
               },
               {
                 id: "05",
-                title: "Standalone ZIP Export",
-                description: "Download ready-to-run project archives configured with Vite, React 18, Lucide icons, and Tailwind CSS. Run anywhere with `npm run dev`.",
-                badge: "EXPORT ZIP",
+                title: "1-Click GitHub & Vercel Deploy",
+                description: "Auto-saves unsaved work, creates a personal GitHub repository, and triggers production edge builds on Vercel with dedicated live domain links.",
+                badge: "PRODUCTION DEPLOY",
               },
               {
                 id: "06",
-                title: "NVIDIA & OpenRouter LLMs",
-                description: "Switch seamlessly between NVIDIA Nemotron-3 Ultra 550B, Qwen 3, Phi-4, and OpenRouter coder models optimized for structured code generation.",
-                badge: "DUAL ENGINES",
+                title: "Multi-Provider AI Orchestration",
+                description: "Powered by Google Gemini 3.6/3.8 Flash, OpenRouter, and NVIDIA NIM with automated 35-second timeouts and circuit-breaker failovers.",
+                badge: "TRI-ENGINE",
               },
               {
                 id: "07",
                 title: "Conversational AI Refinement",
-                description: "Chat directly with the AI assistant to modify individual components, update color palettes, or append new features without regenerating the entire app.",
+                description: "Multi-turn database memory feeds full conversation context into refinement prompts. Tweak components, adjust designs, or abort anytime with the interactive Stop button.",
                 badge: "AI CHAT",
               },
               {
                 id: "08",
-                title: "Database Workspace Sync",
-                description: "Supabase cloud database securely stores every project, revision snapshot, and live deployment link so you never lose your progress.",
-                badge: "PERSISTENCE",
+                title: "Dependency Auto-Sanitizer",
+                description: "Automatically detects external npm imports, reconciles version hallucination with a curated semver catalog, and injects compatible packages into Sandpack seamlessly.",
+                badge: "SMART PACKAGES",
               },
               {
                 id: "09",
-                title: "Monaco Code Editor Tabs",
-                description: "Inspect, tweak, and edit generated files manually using an integrated VS Code-powered Monaco editor with full syntax highlighting.",
-                badge: "FULL CONTROL",
+                title: "Standalone ZIP Export",
+                description: "Download ready-to-run project archives configured with Vite, React 18/19, Lucide icons, and Tailwind CSS. Run locally anywhere with `npm run dev`.",
+                badge: "EXPORT ZIP",
               },
             ].map((feature) => (
               <div
@@ -613,19 +632,19 @@ export default defineConfig({
             {
               step: "01",
               title: "Prompt & Architect",
-              description: "Select your AI engine (NVIDIA NIM or OpenRouter) and describe your application in natural language. The system creates contract schemas, generates modular JSX components, and configures Tailwind styling.",
+              description: "Select your AI engine (Google Gemini, OpenRouter, or NVIDIA) and describe your application in natural language. The system creates contract schemas, generates modular JSX components, and configures Tailwind styling.",
               tag: "STEP 1: ARCHITECTURE",
             },
             {
               step: "02",
-              title: "Interactive Sandbox & Diagnostics",
-              description: "Test your application in real-time using the Sandpack in-browser preview. Switch viewport modes (Desktop, Tablet, Mobile), tweak code directly in Monaco, or click Auto-Fix to heal any runtime syntax issues.",
-              tag: "STEP 2: VALIDATION",
+              title: "Interactive Sandbox & Refinement",
+              description: "Test your application in real-time using the Sandpack in-browser preview. Switch viewport modes (Desktop, Tablet, Mobile), expand fullscreen or pop out to a new tab, chat to refine with persistent memory, or resume partial builds.",
+              tag: "STEP 2: VALIDATION & CHAT",
             },
             {
               step: "03",
-              title: "1-Click Production Deploy & Sync",
-              description: "Click Deploy. The system auto-saves your project, creates a repository on your personal GitHub account, and spins up a live edge production deployment on Vercel with clean custom domain naming.",
+              title: "1-Click Production Deploy & Export",
+              description: "Click Deploy or Export. The system auto-saves your project, creates a repository on your personal GitHub, spins up a live edge production build on Vercel, or packages a ready-to-run Vite+React ZIP archive.",
               tag: "STEP 3: CLOUD LAUNCH",
             },
           ].map((item) => (
@@ -690,12 +709,17 @@ export default defineConfig({
                 </tr>
                 <tr>
                   <td className="py-3.5 px-4 font-mono text-secondary-300">Preview Engine</td>
-                  <td className="py-3.5 px-4 text-white font-medium">Native Sandpack in-browser HMR</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Fast Sandpack with Fullscreen &amp; Viewports</td>
                   <td className="py-3.5 px-4 text-secondary-500">Laggy remote iframes</td>
                 </tr>
                 <tr>
+                  <td className="py-3.5 px-4 font-mono text-secondary-300">Build Resilience</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Partial file preservation &amp; 1-click resume</td>
+                  <td className="py-3.5 px-4 text-secondary-500">Wipes all progress on model timeout</td>
+                </tr>
+                <tr>
                   <td className="py-3.5 px-4 font-mono text-secondary-300">Error Handling</td>
-                  <td className="py-3.5 px-4 text-white font-medium">Self-Healing AI Auto-Fix with stack traces</td>
+                  <td className="py-3.5 px-4 text-white font-medium">Self-Healing AI Auto-Fix &amp; Dependency Sanitizer</td>
                   <td className="py-3.5 px-4 text-secondary-500">Manual copy-paste error prompts</td>
                 </tr>
                 <tr>
@@ -840,7 +864,7 @@ export default defineConfig({
             </span>
           </div>
           <div className="text-secondary-500 text-[9px] sm:text-[11px] font-mono uppercase tracking-widest">
-            © {new Date().getFullYear()} AI WEBSITE BUILDER. VITE • REACT • TAILWIND • VERCEL.
+            © {new Date().getFullYear()} AI WEBSITE BUILDER. VITE • REACT • TAILWIND • GEMINI • VERCEL.
           </div>
         </div>
       </footer>

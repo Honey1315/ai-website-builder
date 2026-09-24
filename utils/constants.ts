@@ -22,9 +22,8 @@ export const MODEL_CATALOG: Record<ModelProvider, ModelCatalogEntry> = {
       "gemini-3.8-flash",
       "gemini-3.5-flash",
       "gemini-3.7-flash",
-      "gemini-2.5-flash",
     ],
-    defaultModel: "gemini-3.6-flash",
+    defaultModel: "gemini-3.5-flash-lite"
   },
   openrouter: {
     label: "OpenRouter",
