@@ -75,7 +75,6 @@ body {
     },
   };
 
-  // Custom technical theme for Sandpack
   const customTheme = {
     colors: {
       surface1: "#05080c",
@@ -110,7 +109,6 @@ body {
 
   return (
     <div className="border border-secondary-800 bg-[#05080c] relative group">
-      {/* Decorative corner */}
       <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-700 opacity-50 z-10 pointer-events-none"></div>
 
       <SandpackProvider

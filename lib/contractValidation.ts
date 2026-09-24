@@ -46,7 +46,7 @@ function getContractProps(manifest: ProjectManifest, componentName: string): str
 export function resolveRelativePath(parentFile: string, importPath: string): string {
   const cleanParent = parentFile.replace(/^\/+/, "");
   const parts = cleanParent.split("/");
-  parts.pop(); // Remove parent filename
+  parts.pop();
 
   const segments = importPath.split("/");
   for (const seg of segments) {
@@ -70,7 +70,6 @@ function doesProjectFileExist(targetPath: string, existingPaths: Set<string>): b
     if (existingPaths.has(clean + ext) || existingPaths.has(`/${clean}${ext}`)) return true;
   }
 
-  // Base sandbox files are always provided
   if (
     clean === "src/index.css" ||
     clean === "src/main.jsx" ||
@@ -81,9 +80,6 @@ function doesProjectFileExist(targetPath: string, existingPaths: Set<string>): b
     return true;
   }
 
-  // Flexible filename resolution: case-insensitive & root/src fallback
-  // e.g. target "src/components/AudioEngine", but file is "src/components/audioengine.jsx"
-  // or "src/AudioEngine.jsx"
   const targetBase = clean.split("/").pop()?.toLowerCase();
   if (targetBase) {
     for (const existing of existingPaths) {
@@ -105,7 +101,6 @@ export function validateContracts(
   const mismatches: ValidationMismatch[] = [];
   const existingFileKeys = new Set(Array.from(metadataByFile.keys()));
 
-  // 1. Verify that all local relative imports point to existing project files
   for (const [parentFile, metadata] of metadataByFile.entries()) {
     if (metadata.localImports && metadata.localImports.length > 0) {
       for (const localImport of metadata.localImports) {

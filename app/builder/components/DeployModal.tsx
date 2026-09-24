@@ -40,16 +40,13 @@ export default function DeployModal({
     );
   };
 
-  // Saved tokens state from API
   const [savedTokens, setSavedTokens] = useState<SavedToken[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
 
-  // GitHub token selection/input
   const [selectedGithubId, setSelectedGithubId] = useState<string>("new");
   const [newGithubToken, setNewGithubToken] = useState("");
   const [saveGithubToAccount, setSaveGithubToAccount] = useState(true);
 
-  // Vercel token selection/input
   const [selectedVercelId, setSelectedVercelId] = useState<string>("new");
   const [newVercelToken, setNewVercelToken] = useState("");
   const [saveVercelToAccount, setSaveVercelToAccount] = useState(true);
@@ -126,7 +123,6 @@ export default function DeployModal({
     let finalVercelToken = selectedVercelId === "new" ? newVercelToken.trim() : undefined;
     let finalVercelTokenId = selectedVercelId !== "new" ? selectedVercelId : undefined;
 
-    // Save new GitHub token to account if requested
     if (selectedGithubId === "new" && finalGithubToken && saveGithubToAccount) {
       try {
         const res = await fetch("/api/tokens", {
@@ -149,7 +145,6 @@ export default function DeployModal({
       }
     }
 
-    // Save new Vercel token to account if requested
     if (selectedVercelId === "new" && finalVercelToken && saveVercelToAccount) {
       try {
         const res = await fetch("/api/tokens", {
@@ -174,7 +169,6 @@ export default function DeployModal({
 
     let activeProjectId = projectId;
 
-    // If project hasn't been saved yet, auto-save first so it exists in Supabase
     if (!activeProjectId && onSaveProject) {
       setIsAutoSaving(true);
       try {
@@ -228,7 +222,6 @@ export default function DeployModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="fixed inset-0 bg-[#05080c]/80 backdrop-blur-md" onClick={handleClose}></div>
       <div className="relative w-full max-w-lg bg-secondary-900 border border-secondary-700 shadow-2xl rounded-none my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden z-10">
-        {/* Decorative corner accent */}
         <div className="absolute top-0 right-0 w-12 h-12 border-t-2 border-r-2 border-primary-500 opacity-50 pointer-events-none z-20"></div>
 
         <div className="flex justify-between items-center border-b border-secondary-800 px-6 py-4 sm:px-8 sm:py-5 shrink-0 bg-secondary-900 z-10">
@@ -255,7 +248,6 @@ export default function DeployModal({
           </button>
         </div>
 
-        {/* Scrollable Content Container */}
         <div className="p-6 sm:p-8 overflow-y-auto flex-1 flex flex-col gap-6">
           {state === "idle" && (
             <div className="flex flex-col gap-6 text-secondary-300">
@@ -278,7 +270,6 @@ export default function DeployModal({
                 </div>
               )}
 
-              {/* ── GITHUB TOKEN SECTION ────────────────────────────────────────── */}
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-end">
                   <label className="text-[10px] font-mono uppercase tracking-widest text-secondary-500">
@@ -381,7 +372,6 @@ export default function DeployModal({
                 )}
               </div>
 
-              {/* ── VERCEL TOKEN SECTION ────────────────────────────────────────── */}
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-end">
                   <label className="text-[10px] font-mono uppercase tracking-widest text-secondary-500">
@@ -484,7 +474,6 @@ export default function DeployModal({
                 )}
               </div>
 
-              {/* ── REPO NAME SECTION ───────────────────────────────────────────── */}
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-mono uppercase tracking-widest text-secondary-500">
                   Repository Name

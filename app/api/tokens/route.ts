@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
     const cleanToken = token.trim();
     const cleanLabel = (label || "Default").trim().slice(0, 50);
 
-    // Compute hint (e.g. ghp_...1234 or ver_...5678)
     const tokenHint =
       cleanToken.length > 8
         ? `${cleanToken.slice(0, 4)}...${cleanToken.slice(-4)}`

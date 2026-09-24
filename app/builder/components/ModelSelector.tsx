@@ -20,7 +20,6 @@ export default function ModelSelector({
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-3 bg-[#0a0f16] border border-secondary-800 p-0.5 sm:p-1 shrink-0">
-      {/* Provider Tabs */}
       <div className="flex">
         {providers.map((key) => {
           const isActive = provider === key;
@@ -31,11 +30,10 @@ export default function ModelSelector({
               onClick={() => onProviderChange(key)}
               className={`px-2 sm:px-3.5 py-1.5 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest transition-colors rounded-none border border-transparent cursor-pointer ${
                 isActive
-                  ? "bg-primary-500 text-secondary-900 font-bold"
+                  ? "bg-primary-500 text-secondary-950 font-bold"
                   : "bg-transparent text-secondary-500 hover:text-white hover:bg-secondary-800"
               }`}
             >
-              {/* Short label on very small screens, full label on sm+ */}
               <span className="sm:hidden">{key === "openrouter" ? "OR" : "GEM"}</span>
               <span className="hidden sm:inline">{MODEL_CATALOG[key].label}</span>
             </button>
@@ -43,10 +41,8 @@ export default function ModelSelector({
         })}
       </div>
 
-      {/* Divider */}
       <div className="w-px h-5 sm:h-6 bg-secondary-800"></div>
 
-      {/* Model Dropdown */}
       <div className="relative flex items-center mr-0.5 sm:mr-1">
         <select
           value={model}
@@ -60,7 +56,6 @@ export default function ModelSelector({
             </option>
           ))}
         </select>
-        {/* Custom Caret */}
         <div className="absolute right-1.5 sm:right-3 pointer-events-none text-primary-400 flex flex-col gap-0.5">
           <svg width="6" height="3" viewBox="0 0 8 4" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="rotate-180 sm:w-2 sm:h-1">
             <path d="M4 0L8 4H0L4 0Z" />

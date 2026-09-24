@@ -58,12 +58,10 @@ function RefineWaitingStatus({ status, onStop }: { status?: string; onStop?: () 
   );
 }
 
-// ─── Inner component (needs Suspense from parent due to useSearchParams) ───────
-
 function BuilderPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const urlProjectId = searchParams.get("projectId"); // single read, used as source of truth for initial load
+  const urlProjectId = searchParams.get("projectId");
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,30 +104,31 @@ function BuilderPageInner() {
   }
   const [pendingDraft, setPendingDraft] = useState<SavedDraftData | null>(null);
 
+  const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
+  const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+  const pendingRouteRef = useRef<string | null>(null);
+  const isSavedToCloud = useRef(false);
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ─── Version History (Undo / Redo) ────────────────────────────────────────
   const MAX_HISTORY = 50;
   interface HistorySnapshot { files: FileData[]; code: string; label: string; }
   const historyStack = useRef<HistorySnapshot[]>([]);
   const historyPointer = useRef<number>(-1);
-  const skipNextPush = useRef(false); // prevent undo/redo itself from pushing
+  const skipNextPush = useRef(false);
 
   const pushHistory = useCallback((newFiles: FileData[], newCode: string, label: string) => {
     if (skipNextPush.current) { skipNextPush.current = false; return; }
-    // Truncate any redo future
     historyStack.current = historyStack.current.slice(0, historyPointer.current + 1);
-    // Push new snapshot (deep-clone files to decouple reference)
     historyStack.current.push({
       files: newFiles.map((f) => ({ ...f })),
       code: newCode,
       label,
     });
-    // Cap to MAX_HISTORY
     if (historyStack.current.length > MAX_HISTORY) {
       historyStack.current = historyStack.current.slice(historyStack.current.length - MAX_HISTORY);
     }
@@ -168,7 +167,6 @@ function BuilderPageInner() {
     setTimeout(() => setDraftNotification(""), 3000);
   }, [syncUndoRedoState]);
 
-  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z = redo
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isCtrl = e.ctrlKey || e.metaKey;
@@ -176,7 +174,7 @@ function BuilderPageInner() {
       if (e.key === "z" && !e.shiftKey) {
         const active = document.activeElement;
         const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement)?.isContentEditable;
-        if (isInput) return; // let CodeEditor / textarea handle its own undo
+        if (isInput) return;
         e.preventDefault();
         handleUndo();
       } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
@@ -273,7 +271,6 @@ function BuilderPageInner() {
     };
   }, []);
 
-  // Click outside and escape key handling for builder menu
   useEffect(() => {
     if (!isMenuOpen) return;
 
@@ -348,7 +345,6 @@ function BuilderPageInner() {
     setModel(MODEL_CATALOG[nextProvider].defaultModel);
   };
 
-  // Stable Supabase client — not recreated on every render
   const supabase = useMemo(
     () =>
       createBrowserClient(
@@ -358,7 +354,6 @@ function BuilderPageInner() {
     []
   );
 
-  // Monitor auth status
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
@@ -371,7 +366,25 @@ function BuilderPageInner() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Check for unsaved draft on load if present and ask user before restoring
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedWork) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedWork]);
+
+  const safeNavigate = useCallback((href: string) => {
+    if (hasUnsavedWork) {
+      pendingRouteRef.current = href;
+      setShowLeaveWarning(true);
+    } else {
+      router.push(href);
+    }
+  }, [hasUnsavedWork, router]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const restoreDraft = searchParams.get("restoreDraft");
@@ -393,7 +406,6 @@ function BuilderPageInner() {
     }
   }, [searchParams, urlProjectId, handleRestoreDraft]);
 
-  // Load existing project when URL has ?projectId=
   useEffect(() => {
     if (!urlProjectId) return;
 
@@ -458,7 +470,6 @@ function BuilderPageInner() {
         }
         setChatMessages(initialMessages);
 
-        // Restore dependencies from saved package.json so Sandpack and sidebar preserve them
         const pkgFile = project.files?.find((f) => f.name === "package.json" || f.name === "/package.json");
         if (pkgFile) {
           try {
@@ -501,7 +512,6 @@ function BuilderPageInner() {
   }, [urlProjectId, router]);
 
   const generateCode = async (prompt: string, isResume = false) => {
-    // Abort any existing running request
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -635,10 +645,11 @@ function BuilderPageInner() {
           setIsPartialGeneration(false);
           setRemainingFiles([]);
           setGenerationStatus(`Generated ${event.files.length} files.`);
-          // Push generation snapshot to history
           const genCode = event.code || "";
           pushHistory(event.files, genCode, `Generated (${event.files.length} files)`);
           syncUndoRedoState();
+          isSavedToCloud.current = false;
+          setHasUnsavedWork(true);
           const userMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: "user",
@@ -699,7 +710,6 @@ function BuilderPageInner() {
   };
 
   const refineCode = async (message: string) => {
-    // Abort any existing running request
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -784,7 +794,6 @@ function BuilderPageInner() {
               if (event.code) setCode(event.code);
               if (event.files && event.files.length > 0) {
                 setFiles(event.files);
-                // Push refinement snapshot to history
                 pushHistory(event.files, event.code || code, `Refined (${event.files.length} files)`);
                 syncUndoRedoState();
               }
@@ -805,7 +814,6 @@ function BuilderPageInner() {
           if (done) break;
         }
       } else {
-        // Fallback for standard JSON responses
         const data = (await res.json()) as RefineApiResponse;
         if (data.error) throw new Error(data.error);
 
@@ -833,6 +841,8 @@ function BuilderPageInner() {
             timestamp: Date.now(),
           },
         ]);
+        isSavedToCloud.current = false;
+        setHasUnsavedWork(true);
       }
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") {
@@ -897,11 +907,9 @@ function BuilderPageInner() {
         return null;
       }
 
-      // projectId state is the single source of truth — not searchParams
       const id = projectId ?? crypto.randomUUID();
       const isNewProject = !projectId;
 
-      // Generate project name and description using AI via API endpoint
       const metadataResponse = await fetch(`/api/project/metadata`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -946,7 +954,6 @@ function BuilderPageInner() {
         });
       }
 
-      // Update state so the user sees it in their editor right after saving
       setFiles(allFiles);
 
       const projectData: Project = {
@@ -976,9 +983,14 @@ function BuilderPageInner() {
 
       if (isNewProject) {
         setProjectId(id);
-        // Update the URL so refreshing or subsequent saves use the same ID
         router.replace(`/builder?projectId=${id}`, { scroll: false });
       }
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("ai_builder_draft");
+      }
+      isSavedToCloud.current = true;
+      setHasUnsavedWork(false);
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -993,11 +1005,10 @@ function BuilderPageInner() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#05080c] text-secondary-50 font-sans relative">
-      {/* HEADER */}
       <nav className="bg-secondary-900 border-b border-secondary-800 shrink-0 z-40 relative">
         <div className="max-w-480 mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
           <div className="flex items-center justify-between gap-2">
-            <Link href="/" className="shrink-0">
+            <button type="button" onClick={() => safeNavigate("/")} className="shrink-0 cursor-pointer">
               <div className="flex items-center gap-2 sm:gap-3 group">
                 <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
                   <span className="text-primary-400 font-mono text-[10px]">AI</span>
@@ -1006,9 +1017,8 @@ function BuilderPageInner() {
                   Workspace
                 </span>
               </div>
-            </Link>
+            </button>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* ModelSelector stays visible on header bar as requested */}
               <ModelSelector
                 provider={provider}
                 model={model}
@@ -1016,7 +1026,6 @@ function BuilderPageInner() {
                 onModelChange={setModel}
               />
 
-              {/* Status indicator if saving or saved */}
               {isSaving && (
                 <span className="text-secondary-400 font-mono text-[9px] sm:text-[10px] uppercase tracking-wider animate-pulse hidden sm:inline">
                   [ Saving... ]
@@ -1028,8 +1037,6 @@ function BuilderPageInner() {
                 </span>
               )}
 
-
-              {/* Three horizontal parallel lines menu button */}
               <div className="relative">
                 <button
                   ref={buttonRef}
@@ -1065,16 +1072,13 @@ function BuilderPageInner() {
                   </svg>
                 </button>
 
-                {/* Dropdown Menu */}
                 {isMenuOpen && (
                   <div
                     ref={menuRef}
                     className="absolute right-0 mt-2 w-60 sm:w-64 bg-secondary-900 border border-secondary-800 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150"
                   >
-                    {/* Decorative corner accent */}
                     <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-primary-500"></div>
 
-                    {/* User Header if authenticated */}
                     {user && (
                       <div className="px-4 py-3 border-b border-secondary-800 bg-[#070b10]">
                         <div className="text-[9px] font-mono text-primary-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
@@ -1087,42 +1091,39 @@ function BuilderPageInner() {
                       </div>
                     )}
 
-                    {/* Navigation Section: Projects, Profile, Home */}
                     <div className="py-2 border-b border-secondary-800">
                       <div className="px-4 pb-1 text-[9px] font-mono uppercase tracking-widest text-secondary-500">
                         Navigation
                       </div>
-                      <Link
-                        href="/projects"
-                        onClick={() => setIsMenuOpen(false)}
-                        className="flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group"
+                      <button
+                        type="button"
+                        onClick={() => { setIsMenuOpen(false); safeNavigate("/projects"); }}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group cursor-pointer"
                       >
                         <span className="flex items-center gap-2.5">
                           <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
                           Projects
                         </span>
                         <span className="text-[10px] text-secondary-600 group-hover:text-primary-400">↗</span>
-                      </Link>
-                      <Link
-                        href="/"
-                        onClick={() => setIsMenuOpen(false)}
-                        className="flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group"
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setIsMenuOpen(false); safeNavigate("/"); }}
+                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-mono uppercase tracking-wider text-secondary-300 hover:text-white hover:bg-secondary-800/60 transition-colors group cursor-pointer"
                       >
                         <span className="flex items-center gap-2.5">
                           <span className="w-1.5 h-1.5 bg-secondary-600 group-hover:bg-primary-400 transition-colors"></span>
                           Home
                         </span>
                         <span className="text-[10px] text-secondary-600 group-hover:text-primary-400 font-mono">/</span>
-                      </Link>
+                      </button>
                     </div>
 
-                    {/* Project Actions Section */}
                     <div className="py-2">
                       <div className="px-4 pb-1 text-[9px] font-mono uppercase tracking-widest text-secondary-500">
                         Project Actions
                       </div>
 
-                      {/* Save Project */}
                       <button
                         onClick={() => {
                           setIsMenuOpen(false);
@@ -1138,7 +1139,6 @@ function BuilderPageInner() {
                         <span className="text-[10px] text-primary-400 font-bold">{saveSuccess ? "✓" : "_"}</span>
                       </button>
 
-                      {/* Export ZIP */}
                       <button
                         onClick={() => {
                           setIsMenuOpen(false);
@@ -1154,7 +1154,6 @@ function BuilderPageInner() {
                         <span className="text-[10px] text-secondary-600 group-hover:text-primary-400 font-mono">.zip</span>
                       </button>
 
-                      {/* Deploy to Vercel */}
                       <button
                         onClick={() => {
                           setIsMenuOpen(false);
@@ -1171,7 +1170,6 @@ function BuilderPageInner() {
                       </button>
                     </div>
 
-                    {/* Auth Section */}
                     {user ? (
                       <div className="border-t border-secondary-800 p-2">
                         <button
@@ -1207,7 +1205,6 @@ function BuilderPageInner() {
         </div>
       </nav>
 
-      {/* Mobile View Switcher Tab Bar (< lg only) */}
       <div className="flex lg:hidden items-center justify-between border-b border-secondary-800 bg-secondary-900/90 backdrop-blur shrink-0 px-2 sm:px-4 py-1.5 z-10 gap-1.5">
         <button
           onClick={() => setMobileView("chat")}
@@ -1238,7 +1235,6 @@ function BuilderPageInner() {
         </button>
       </div>
 
-      {/* Real-time Draft & Auth Notification Banner */}
       {draftNotification && (
         <div className="bg-primary-500/10 border-b border-primary-500/30 text-primary-400 px-4 py-2 text-xs font-mono flex items-center justify-between z-20">
           <div className="flex items-center gap-2">
@@ -1249,14 +1245,77 @@ function BuilderPageInner() {
         </div>
       )}
 
-      {/* Unsaved Project Restore Confirmation Modal */}
+      {showLeaveWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#05080c]/90 backdrop-blur-md p-4">
+          <div className="relative w-full max-w-md bg-[#0a0f16] border border-amber-500/40 shadow-2xl p-6 sm:p-7 flex flex-col gap-5">
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-amber-500 opacity-60 pointer-events-none"></div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-amber-400">
+                <span className="w-1.5 h-1.5 bg-amber-400 animate-pulse block"></span>
+                <span>SYS_WARN // UNSAVED_CHANGES</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-display text-white font-medium">
+                Save Before Leaving?
+              </h3>
+              <p className="text-xs text-secondary-400 font-light leading-relaxed">
+                You have unsaved changes that haven't been saved to your account. If you leave now, your local draft will remain, but it may be overwritten the next time you generate a project.
+              </p>
+            </div>
+
+            <div className="bg-amber-500/5 border border-amber-500/20 p-3 font-mono text-[10px] text-amber-300/80">
+              <span className="text-amber-400 font-bold">TIP:</span> Click "Save Project" in the top-right menu to preserve your work before navigating away.
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLeaveWarning(false);
+                  pendingRouteRef.current = null;
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 border border-secondary-700 bg-secondary-900/60 hover:bg-secondary-800 text-secondary-400 hover:text-white font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel — Stay Here
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowLeaveWarning(false);
+                  const savedId = await handleSave();
+                  if (savedId !== null && pendingRouteRef.current) {
+                    router.push(pendingRouteRef.current);
+                  }
+                  pendingRouteRef.current = null;
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-secondary-950 font-bold font-mono text-xs uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20"
+              >
+                Save & Leave ↗
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLeaveWarning(false);
+                  setHasUnsavedWork(false);
+                  if (pendingRouteRef.current) {
+                    router.push(pendingRouteRef.current);
+                  }
+                  pendingRouteRef.current = null;
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 border border-danger-500/40 bg-danger-500/5 hover:bg-danger-500/10 hover:border-danger-500 text-danger-400 font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Leave Without Saving
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingDraft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05080c]/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-lg bg-[#0a0f16] border border-secondary-800 shadow-2xl p-6 sm:p-7 flex flex-col gap-5 text-left">
-            {/* Corner tech accent */}
             <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-60 pointer-events-none"></div>
 
-            {/* Header */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-primary-400">
                 <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
@@ -1270,7 +1329,6 @@ function BuilderPageInner() {
               </p>
             </div>
 
-            {/* Draft Details Card */}
             <div className="bg-[#05080c] border border-secondary-800/80 p-3.5 space-y-2 font-mono text-xs">
               <div className="text-[10px] text-secondary-500 uppercase tracking-wider flex justify-between items-center border-b border-secondary-800/60 pb-1.5">
                 <span>DRAFT SUMMARY</span>
@@ -1310,7 +1368,6 @@ function BuilderPageInner() {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -1341,11 +1398,9 @@ function BuilderPageInner() {
         onSaveProject={handleSave}
       />
 
-      {/* Loading overlay when fetching an existing project */}
       {isLoadingProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05080c]/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-6 p-12 bg-secondary-900 border border-secondary-800 shadow-2xl relative">
-            {/* Corner accent */}
             <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-50"></div>
 
             <div className="relative w-12 h-12 flex items-center justify-center">
@@ -1360,13 +1415,9 @@ function BuilderPageInner() {
         </div>
       )}
 
-      {/* Main Layout - Split Panel Design */}
       <div className="flex-1 flex flex-col lg:flex-row relative min-h-0">
-
-        {/* Left Sidebar (Generate & Chat) */}
         <div className={`w-full lg:w-105 flex flex-col border-r border-secondary-800 bg-secondary-900/40 shrink-0 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto ${mobileView === "chat" ? "flex flex-1 lg:flex-initial" : "hidden lg:flex"
           }`}>
-          {/* GENERATE */}
           <div className="p-4 sm:p-6 border-b border-secondary-800 shrink-0">
             <h2 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-secondary-600 block"></span>
@@ -1391,7 +1442,6 @@ function BuilderPageInner() {
             />
           </div>
 
-          {/* CHAT */}
           <div className="p-4 sm:p-6 flex flex-col shrink-0">
             <h3 className="text-[10px] font-mono text-secondary-500 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-primary-400 block"></span>
@@ -1411,7 +1461,6 @@ function BuilderPageInner() {
           </div>
         </div>
 
-        {/* Right Workspace (Main Content) */}
         <div className={`flex-1 p-3 sm:p-6 overflow-y-auto flex flex-col gap-4 sm:gap-6 bg-[#0a0f16] relative ${mobileView !== "chat" ? "flex" : "hidden lg:flex"
           }`}>
 
@@ -1498,7 +1547,6 @@ function BuilderPageInner() {
               onErrorChange={setSandpackError}
             >
               <div className="w-full flex-1 h-full min-h-0 flex flex-col gap-4 sm:gap-6">
-                {/* Editor Section */}
                 <div className={`w-full flex flex-col md:flex-row gap-3 sm:gap-4 min-h-0 ${mobileView === "preview"
                   ? "hidden lg:flex lg:h-[480px] xl:h-[540px] shrink-0"
                   : "flex flex-1 h-full min-h-[480px] lg:flex-none lg:h-[480px] xl:h-[540px]"
@@ -1517,7 +1565,6 @@ function BuilderPageInner() {
                     />
                   </div>
                 </div>
-                {/* Preview Section */}
                 <div className={`w-full border border-secondary-800 bg-[#05080c] relative flex flex-col min-h-0 ${mobileView === "code"
                   ? "hidden lg:block lg:h-[580px] xl:h-[680px] shrink-0"
                   : "block flex-1 h-full min-h-[580px] lg:flex-none lg:h-[580px] xl:h-[680px]"
@@ -1532,8 +1579,6 @@ function BuilderPageInner() {
     </div>
   );
 }
-
-// ─── Outer component owns the Suspense boundary ────────────────────────────────
 
 export default function BuilderPage() {
   return (

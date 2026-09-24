@@ -5,7 +5,6 @@ import { SandpackFileExplorer as OriginalFileExplorer } from "@codesandbox/sandp
 export default function SandpackFileExplorer() {
   return (
     <div className="w-full h-full min-h-0 flex flex-col bg-[#05080c] overflow-hidden relative explorer-wrapper">
-      {/* Corner accent */}
       <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-secondary-700 opacity-50 z-10 pointer-events-none"></div>
 
       <div className="p-3 bg-secondary-900 border-b border-secondary-800 shrink-0 flex items-center justify-between">

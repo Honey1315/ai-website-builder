@@ -4,12 +4,10 @@ export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
   const root: FileTreeNode[] = [];
   const nodeMap = new Map<string, FileTreeNode>();
 
-  // Create nodes for each file
   files.forEach((file) => {
     const pathParts = file.path.split("/").filter((p) => p);
     let currentPath = "";
 
-    // Create folder structure
     pathParts.slice(0, -1).forEach((part) => {
       currentPath += `/${part}`;
       if (!nodeMap.has(currentPath)) {
@@ -22,7 +20,6 @@ export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
       }
     });
 
-    // Create file node
     const fileNode: FileTreeNode = {
       id: file.id,
       name: file.name,
@@ -33,7 +30,6 @@ export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
 
     nodeMap.set(file.path, fileNode);
 
-    // Add to parent
     if (pathParts.length > 1) {
       const parentPath = `/${pathParts.slice(0, -1).join("/")}`;
       const parent = nodeMap.get(parentPath);
@@ -70,7 +66,6 @@ export function flattenFileTree(node: FileTreeNode, files: ProjectFile[] = []): 
 export function parseFileStructure(code: string): FileParseResult {
   const files: ProjectFile[] = [];
 
-  // Extract files from code with pattern: // FILE: path/filename.tsx
   const filePattern = /\/\/\s*FILE:\s*([^\n]+)\n([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
   let match;
   let hasFiles = false;
@@ -90,7 +85,6 @@ export function parseFileStructure(code: string): FileParseResult {
     });
   }
 
-  // If no structured files, treat as single entry point
   if (!hasFiles) {
     files.push({
       id: "App.jsx",

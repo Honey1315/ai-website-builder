@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No files to deploy" }, { status: 400 });
     }
 
-    // Guard against oversized payloads: max 50 files, max 500 KB per file.
     const MAX_FILES = 50;
     const MAX_FILE_BYTES = 500 * 1024;
     if (files.length > MAX_FILES) {
@@ -66,7 +65,6 @@ export async function POST(request: NextRequest) {
 
     const finalRepoName = repoName || (projectName ? projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-') : "") || "ai-website";
 
-    // 1. Create Repository
     let repoInfo;
     try {
       const createRepoRes = await fetch("https://api.github.com/user/repos", {
@@ -80,7 +78,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           name: finalRepoName,
           private: true,
-          auto_init: true, // Initialize with a README/initial commit
+          auto_init: true,
         }),
       });
 
@@ -96,10 +94,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Network error creating repository" }, { status: 500 });
     }
 
-    // Wait a brief moment for auto-init to complete on GitHub's side
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // 2. Get latest commit SHA on main/master
     const defaultBranch = repoInfo.default_branch || "main";
     const refRes = await fetch(
       `https://api.github.com/repos/${repoInfo.owner.login}/${repoInfo.name}/git/ref/heads/${defaultBranch}`,
@@ -111,14 +107,13 @@ export async function POST(request: NextRequest) {
         },
       }
     );
-    
+
     if (!refRes.ok) {
-        return NextResponse.json({ error: "Failed to fetch repository reference" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to fetch repository reference" }, { status: 500 });
     }
     const refData = await refRes.json();
     const latestCommitSha = refData.object.sha;
 
-    // 3. Get base tree SHA
     const commitRes = await fetch(
       `https://api.github.com/repos/${repoInfo.owner.login}/${repoInfo.name}/git/commits/${latestCommitSha}`,
       {
@@ -132,7 +127,6 @@ export async function POST(request: NextRequest) {
     const commitData = await commitRes.json();
     const baseTreeSha = commitData.tree.sha;
 
-    // 4. Create Tree with all files
     const ROOT_FILES = new Set([
       "package.json",
       "index.html",
@@ -147,16 +141,13 @@ export async function POST(request: NextRequest) {
     ]);
 
     const treeItems = files.map((file: FileData) => {
-      // Fix file path if it starts with /
       const filePath = file.name.startsWith("/") ? file.name.slice(1) : file.name;
-      
+
       let normalizedPath = filePath;
-      // If it's a known root file or in public/ or already in src/, don't prepend src/
       if (!ROOT_FILES.has(filePath) && !filePath.startsWith("public/") && !filePath.startsWith("src/")) {
         normalizedPath = `src/${filePath}`;
       }
-      
-      // For production deployment to Vercel/GitHub, strip any Sandpack preview CDN script from index.html
+
       let content = file.content;
       if (filePath === "index.html" || normalizedPath === "index.html") {
         content = content.replace(/<script\s+src=["']https:\/\/cdn\.tailwindcss\.com["']><\/script>\s*/gi, "");
@@ -179,7 +170,7 @@ export async function POST(request: NextRequest) {
           };
           content = JSON.stringify(parsed, null, 2);
         } catch {
-          // keep original if invalid JSON
+
         }
       }
 
@@ -191,7 +182,6 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // 1. Add package.json with Tailwind CSS v3 dependencies if not provided
     const hasPackageJson = treeItems.some((item: any) => item.path === "package.json");
     if (!hasPackageJson) {
       treeItems.push({
@@ -224,7 +214,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Add index.html at root (clean Vite entrypoint without CDN for Vercel production build)
     const hasIndexHtml = treeItems.some((item: any) => item.path === "index.html");
     if (!hasIndexHtml) {
       treeItems.push({
@@ -246,7 +235,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 3. Add vite.config.js at root
     const hasViteConfig = treeItems.some((item: any) => item.path === "vite.config.js" || item.path === "vite.config.ts");
     if (!hasViteConfig) {
       treeItems.push({
@@ -262,7 +250,6 @@ export default defineConfig({
       });
     }
 
-    // 4. Add tailwind.config.js at root (Tailwind CSS v3)
     const hasTailwindConfig = treeItems.some((item: any) => item.path === "tailwind.config.js" || item.path === "tailwind.config.ts");
     if (!hasTailwindConfig) {
       treeItems.push({
@@ -283,7 +270,6 @@ export default {
       });
     }
 
-    // 5. Add postcss.config.js at root
     const hasPostcssConfig = treeItems.some((item: any) => item.path === "postcss.config.js" || item.path === "postcss.config.mjs" || item.path === "postcss.config.cjs");
     if (!hasPostcssConfig) {
       treeItems.push({
@@ -299,7 +285,6 @@ export default {
       });
     }
 
-    // 6. Add src/main.jsx if not provided
     const hasMainJsx = treeItems.some((item: any) => item.path === "src/main.jsx" || item.path === "src/main.tsx");
     if (!hasMainJsx) {
       treeItems.push({
@@ -319,7 +304,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       });
     }
 
-    // 7. Add src/index.css with Tailwind CSS v3 directives if not present
     const existingIndexCss = treeItems.find((item: any) => item.path === "src/index.css");
     if (!existingIndexCss) {
       treeItems.push({
@@ -361,13 +345,12 @@ body {
         }),
       }
     );
-    
-    if(!createTreeRes.ok) {
-        return NextResponse.json({ error: "Failed to create git tree" }, { status: 500 });
+
+    if (!createTreeRes.ok) {
+      return NextResponse.json({ error: "Failed to create git tree" }, { status: 500 });
     }
     const treeData = await createTreeRes.json();
 
-    // 5. Create Commit
     const createCommitRes = await fetch(
       `https://api.github.com/repos/${repoInfo.owner.login}/${repoInfo.name}/git/commits`,
       {
@@ -385,13 +368,12 @@ body {
         }),
       }
     );
-    
-    if(!createCommitRes.ok) {
-        return NextResponse.json({ error: "Failed to create commit" }, { status: 500 });
+
+    if (!createCommitRes.ok) {
+      return NextResponse.json({ error: "Failed to create commit" }, { status: 500 });
     }
     const newCommitData = await createCommitRes.json();
 
-    // 6. Update Reference
     const updateRefRes = await fetch(
       `https://api.github.com/repos/${repoInfo.owner.login}/${repoInfo.name}/git/refs/heads/${defaultBranch}`,
       {
@@ -409,8 +391,8 @@ body {
       }
     );
 
-    if(!updateRefRes.ok) {
-        return NextResponse.json({ error: "Failed to update branch reference" }, { status: 500 });
+    if (!updateRefRes.ok) {
+      return NextResponse.json({ error: "Failed to update branch reference" }, { status: 500 });
     }
 
     return NextResponse.json({

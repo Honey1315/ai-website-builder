@@ -24,13 +24,11 @@ export function Navbar() {
   );
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
 
-    // Listen for auth changes
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -41,7 +39,6 @@ export function Navbar() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Click outside and escape key handling
   useEffect(() => {
     if (!isOpen) return;
 
@@ -96,7 +93,6 @@ export function Navbar() {
     <nav className="bg-[#05080c] border-b border-secondary-800">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div className="flex justify-between items-center gap-2">
-          {/* Logo */}
           <Link href="/" className="flex items-center gap-2 sm:gap-4 group shrink-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary-500/10 border border-primary-500/30 flex items-center justify-center group-hover:border-primary-400 transition-colors">
               <span className="text-primary-400 font-mono text-[10px]">AI</span>
@@ -106,9 +102,7 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* Right Navigation */}
           <div className="flex gap-2 sm:gap-3 items-center shrink-0">
-            {/* Authenticated user indicator */}
             {session && (
               <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-mono text-secondary-400 px-2 py-1 border border-secondary-800/80 bg-secondary-900/40">
                 <span className="w-1.5 h-1.5 bg-primary-400"></span>
@@ -120,7 +114,6 @@ export function Navbar() {
               </span>
             )}
 
-            {/* Guest sign in button */}
             {!session && (
               <Button
                 variant="secondary"
@@ -154,7 +147,6 @@ export function Navbar() {
               </Button>
             )}
 
-            {/* Three horizontal parallel lines menu button */}
             <div className="relative">
               <button
                 ref={buttonRef}
@@ -190,16 +182,13 @@ export function Navbar() {
                 </svg>
               </button>
 
-              {/* Dropdown Menu */}
               {isOpen && (
                 <div
                   ref={menuRef}
                   className="absolute right-0 mt-2 w-56 sm:w-64 bg-secondary-900 border border-secondary-800 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150"
                 >
-                  {/* Decorative corner accent */}
                   <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-primary-500"></div>
 
-                  {/* Header if authenticated */}
                   {session && (
                     <div className="px-4 py-3 border-b border-secondary-800 bg-[#070b10]">
                       <div className="text-[9px] font-mono text-primary-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
@@ -212,7 +201,6 @@ export function Navbar() {
                     </div>
                   )}
 
-                  {/* Navigation Links: Builder, Projects*/}
                   <div className="py-2">
                     <Link
                       href="/builder"
@@ -239,7 +227,6 @@ export function Navbar() {
                     </Link>
                   </div>
 
-                  {/* Authenticated Sign Out */}
                   {session && (
                     <div className="border-t border-secondary-800 p-2">
                       <button
@@ -255,7 +242,6 @@ export function Navbar() {
                     </div>
                   )}
 
-                  {/* Guest Sign In inside menu */}
                   {!session && (
                     <div className="border-t border-secondary-800 p-3">
                       <button

@@ -33,14 +33,10 @@ export default function CodeEditor({
       file && typeof file === "object" && "code" in file ? file.code : "";
     const normalizedPath = safeActiveFile.replace(/^\//, "");
 
-    // 1. Manually recompile and refresh the live preview
     runSandpack();
-
-    // 2. Notify parent to sync the files state in React
     onSaveFile?.(normalizedPath, currentCode);
     onSave?.(currentCode);
 
-    // 3. Visual feedback
     setJustSaved(true);
     const timer = setTimeout(() => setJustSaved(false), 2500);
     return () => clearTimeout(timer);
@@ -59,7 +55,6 @@ export default function CodeEditor({
 
   return (
     <div className="w-full h-full flex flex-col border border-secondary-800 bg-[#05080c] overflow-hidden relative group">
-      {/* Corner accent */}
       <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-700 opacity-50 z-10 pointer-events-none"></div>
 
       <div className="p-2.5 px-3 bg-secondary-900 border-b border-secondary-800 flex items-center justify-between shrink-0">
@@ -81,7 +76,6 @@ export default function CodeEditor({
             </span>
           )}
 
-          {/* Undo / Redo buttons */}
           {(onUndo || onRedo) && (
             <div className="h-7 flex items-center border border-secondary-700 bg-[#0a0f16] shrink-0 box-border">
               <button
@@ -112,7 +106,6 @@ export default function CodeEditor({
             </div>
           )}
 
-          {/* Save button */}
           <button
             type="button"
             onClick={handleSave}

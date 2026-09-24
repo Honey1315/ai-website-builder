@@ -12,16 +12,10 @@ export interface UnhealthyModelInfo {
   expiresAt: Date;
 }
 
-// Map of modelId -> cooldown expiration timestamp (in milliseconds)
 const cooldownMap = new Map<string, number>();
 
-/** Default cooldown duration in seconds (5 minutes) */
 export const DEFAULT_COOLDOWN_SECONDS = 300;
 
-/**
- * Checks if a model is healthy (not currently in a cooldown window).
- * Automatically cleans up expired cooldown entries.
- */
 export function isModelHealthy(modelId: string): boolean {
   if (!modelId) return false;
   const expiresAt = cooldownMap.get(modelId);
@@ -36,15 +30,12 @@ export function isModelHealthy(modelId: string): boolean {
   return false;
 }
 
-/**
- * Parses retry-after duration (in seconds) from an error object or HTTP headers.
- */
+
 function extractRetryAfterSeconds(error?: unknown): number | null {
   if (!error || typeof error !== "object") return null;
 
   const err = error as Record<string, any>;
 
-  // 1. Direct numeric properties
   if (typeof err.retry_after_seconds === "number" && err.retry_after_seconds > 0) {
     return Math.ceil(err.retry_after_seconds);
   }
@@ -55,7 +46,6 @@ function extractRetryAfterSeconds(error?: unknown): number | null {
     return Math.ceil(err.retryAfter);
   }
 
-  // 2. HTTP headers (e.g. OpenAI / Fetch Response)
   const headers = err.headers;
   let retryHeader: string | null = null;
   if (headers) {
@@ -78,7 +68,6 @@ function extractRetryAfterSeconds(error?: unknown): number | null {
     }
   }
 
-  // 3. Inspect error message for retry duration phrases
   if (typeof err.message === "string") {
     const match =
       err.message.match(/retry(?:ing)? after (\d+) (?:seconds|s)/i) ||

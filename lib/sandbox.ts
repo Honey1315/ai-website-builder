@@ -82,7 +82,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     },
   };
 
-  // Merge additional files - normalize paths to absolute sandpack keys
   if (files && files.length > 0) {
     files.forEach((file) => {
       const key = file.name.startsWith("/") ? file.name : `/${file.name}`;

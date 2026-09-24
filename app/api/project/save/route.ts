@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify ownership if project already exists in the database
     if (projectData.id) {
       const existingProject = await prisma.projects.findUnique({
         where: { id: projectData.id },
@@ -37,7 +36,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Ensure user exists in our database before starting the transaction to keep the transaction fast
+
     await prisma.user.upsert({
       where: { id: userId },
       update: {},
@@ -45,20 +44,19 @@ export async function POST(request: NextRequest) {
         id: userId,
         email: supabaseUser.email || '',
         name: supabaseUser.user_metadata?.full_name ||
-              supabaseUser.email?.split('@')[0] ||
-              'User',
+          supabaseUser.email?.split('@')[0] ||
+          'User',
         image: supabaseUser.user_metadata?.avatar_url ||
-               supabaseUser.user_metadata?.picture ||
-               null,
+          supabaseUser.user_metadata?.picture ||
+          null,
         createdat: new Date(),
         updatedat: new Date(),
       },
     });
 
-    // Start a transaction to ensure project and files are saved atomically
+
     const result = await prisma.$transaction(
       async (tx) => {
-        // Upsert the project (update if exists, create if not)
         const project = await tx.projects.upsert({
           where: { id: projectData.id },
           update: {
@@ -82,12 +80,10 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Delete existing files for this project (to replace them with new ones)
         await tx.project_files.deleteMany({
           where: { project_id: project.id },
         });
 
-        // Create new file records if files are provided
         if (projectData.files && projectData.files.length > 0) {
           await tx.project_files.createMany({
             data: projectData.files.map((file: FileData) => ({
@@ -100,7 +96,6 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Sync messages if provided
         if (projectData.messages && projectData.messages.length > 0) {
           await tx.messages.deleteMany({
             where: { project_id: project.id },
@@ -119,12 +114,11 @@ export async function POST(request: NextRequest) {
         return project;
       },
       {
-        maxWait: 10000, // Wait up to 10s to acquire a connection
-        timeout: 30000, // Allow up to 30s for the transaction to complete (prevents P2028)
+        maxWait: 10000,
+        timeout: 30000,
       }
     );
 
-    // Fetch the project with its files and messages to return
     const projectWithFiles = await prisma.projects.findUnique({
       where: { id: result.id },
       include: {
@@ -133,12 +127,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Handle case where project is not found (shouldn't happen in upsert, but safe to check)
+
     if (!projectWithFiles) {
       throw new Error("Project not found after upsert");
     }
 
-    // Transform to match the Project type expected by the frontend
+
     const responseProject: Project = {
       id: projectWithFiles.id,
       name: projectWithFiles.name,
@@ -189,11 +183,24 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, github_link, vercel_link } = body;
+    const { id, name, description, github_link, vercel_link } = body as {
+      id?: string;
+      name?: string;
+      description?: string | null;
+      github_link?: string | null;
+      vercel_link?: string | null;
+    };
 
-    if (!id) {
+    if (!id || typeof id !== "string") {
       return NextResponse.json(
         { error: "Project ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+      return NextResponse.json(
+        { error: "Project name cannot be empty" },
         { status: 400 }
       );
     }
@@ -220,6 +227,10 @@ export async function PATCH(request: NextRequest) {
     const updated = await prisma.projects.update({
       where: { id },
       data: {
+        ...(name !== undefined ? { name: name.trim().slice(0, 255) } : {}),
+        ...(description !== undefined
+          ? { description: typeof description === "string" ? (description.trim() || null) : null }
+          : {}),
         ...(github_link !== undefined ? { github_link } : {}),
         ...(vercel_link !== undefined ? { vercel_link } : {}),
         updated_at: new Date(),
@@ -227,12 +238,18 @@ export async function PATCH(request: NextRequest) {
     });
 
     return NextResponse.json({
-      id: updated.id,
-      github_link: updated.github_link ?? undefined,
-      vercel_link: updated.vercel_link ?? undefined,
+      success: true,
+      project: {
+        id: updated.id,
+        name: updated.name,
+        description: updated.description ?? null,
+        github_link: updated.github_link ?? undefined,
+        vercel_link: updated.vercel_link ?? undefined,
+        updatedAt: updated.updated_at,
+      },
     });
   } catch (error) {
-    console.error("Error updating project links:", error);
+    console.error("Error updating project:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }
@@ -273,7 +290,6 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Transform to match the Project type expected by the frontend
       const projectResponse: Project = {
         id: project.id,
         name: project.name,
@@ -301,7 +317,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(projectResponse);
     }
 
-    // Get all projects for the authenticated user only
     const projects = await prisma.projects.findMany({
       where: { user_id: userId },
       include: {
@@ -310,7 +325,6 @@ export async function GET(request: NextRequest) {
       orderBy: { updated_at: 'desc' },
     });
 
-    // Transform to match the Project type expected by the frontend
     const projectsResponse: Project[] = projects.map((project) => ({
       id: project.id,
       name: project.name,
@@ -363,7 +377,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Verify project exists and check ownership before deleting
     const project = await prisma.projects.findUnique({
       where: { id: projectId },
       select: { user_id: true },

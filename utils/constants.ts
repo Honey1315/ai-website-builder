@@ -48,7 +48,6 @@ export const MODEL_CATALOG: Record<ModelProvider, ModelCatalogEntry> = {
   },
 };
 
-// Default provider: Gemini (primary) -> OpenRouter -> NVIDIA
 export const DEFAULT_MODEL_PROVIDER: ModelProvider = "gemini";
 
 export const API_ENDPOINTS = {

@@ -14,20 +14,17 @@ export async function createProjectZip(
 ): Promise<Blob> {
   const zip = new JSZip();
 
-  // Add main code file
   zip.file(
     "src/App.jsx",
     code || "export default function App() { return <div>App</div>; }"
   );
 
-  // Add additional files
   files.forEach((file) => {
     const filePath = file.name.startsWith("/") ? file.name.slice(1) : file.name;
-    
-    // If it's already a root file (config files, index.html), don't prepend src/
+
     if (
-      filePath === "package.json" || 
-      filePath.startsWith("public/") || 
+      filePath === "package.json" ||
+      filePath.startsWith("public/") ||
       filePath === "index.html" ||
       filePath === "vite.config.js" ||
       filePath === "tailwind.config.js" ||
@@ -52,7 +49,6 @@ export async function createProjectZip(
           };
           content = JSON.stringify(parsed, null, 2);
         } catch {
-          // keep original content if invalid JSON
         }
       }
       zip.file(filePath, content);
@@ -68,7 +64,6 @@ export async function createProjectZip(
     }
   });
 
-  // Add package.json only if not already provided
   const hasPackageJson = files.some(f => f.name === "package.json" || f.name === "/package.json");
   if (!hasPackageJson) {
     const detectedDeps: Record<string, string> = {};
@@ -113,7 +108,6 @@ export async function createProjectZip(
     );
   }
 
-  // Add README
   zip.file(
     "README.md",
     `# ${projectName || "AI Website"}
@@ -129,7 +123,6 @@ npm run dev
 `
   );
 
-  // Add index.html only if not already provided (Vite uses index.html at root)
   const hasIndexHtml = files.some(f => f.name === "index.html" || f.name === "/index.html");
   if (!hasIndexHtml) {
     zip.file(
@@ -162,7 +155,6 @@ export default defineConfig({
     );
   }
 
-  // Add tailwind.config.js only if not already provided
   const hasTailwindConfig = files.some(f => f.name === "tailwind.config.js" || f.name === "/tailwind.config.js");
   if (!hasTailwindConfig) {
     zip.file(
@@ -181,7 +173,6 @@ export default {
     );
   }
 
-  // Add postcss.config.js only if not already provided
   const hasPostcssConfig = files.some(f => f.name === "postcss.config.js" || f.name === "/postcss.config.js");
   if (!hasPostcssConfig) {
     zip.file(
@@ -196,7 +187,6 @@ export default {
   }
 
 
-  // Add src/main.jsx only if not already provided
   const hasMainJsx = files.some(f => f.name === "src/main.jsx" || f.name === "/src/main.jsx");
   if (!hasMainJsx) {
     zip.file(
@@ -236,6 +226,3 @@ export async function downloadProjectZip(
   saveAs(blob, `${projectName || "project"}.zip`);
 }
 
-// Note: You'll need to install dependencies:
-// npm install jszip file-saver
-// npm install --save-dev @types/file-saver

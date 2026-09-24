@@ -41,7 +41,6 @@ function parseDestructuredProps(params: string): string[] {
   const trimmed = params.trim();
   if (!trimmed.startsWith("{")) return [];
 
-  // Find matching closing brace for the destructuring object
   let depth = 0;
   let insideBraces = "";
   let found = false;
@@ -63,7 +62,6 @@ function parseDestructuredProps(params: string): string[] {
 
   if (!found) return [];
 
-  // Parse top-level comma-separated items inside `{ ... }`
   const props: string[] = [];
   let current = "";
   let parenDepth = 0;
@@ -157,7 +155,6 @@ function extractExports(content: string): { exports: string[]; componentProps: R
     }
   }
 
-  // Handle anonymous export default function(...)
   if (!foundNames.has("default")) {
     const anonMatch = content.match(/export\s+default\s+function\s*\(/);
     if (anonMatch) {
@@ -165,7 +162,6 @@ function extractExports(content: string): { exports: string[]; componentProps: R
     }
   }
 
-  // Extract parameters for each component using balanced parenthesis parsing
   for (const name of exports) {
     const paramStr = extractParameterString(content, name);
     if (paramStr) {

@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 
+const EXAMPLE_PROMPTS = [
+  "A sleek SaaS landing page with a hero section, feature grid, pricing table, and a call-to-action footer. Dark mode with teal accents.",
+  "A personal portfolio for a fullstack developer — animated hero, project cards with GitHub/live links, skills section, and contact form.",
+  "A minimal productivity dashboard with sidebar navigation, task list with checkboxes, a calendar widget, and a progress tracker.",
+  "An e-commerce product page with image gallery, size selector, add-to-cart button, reviews section, and a sticky purchase bar.",
+];
+
 interface PromptInputProps {
   onSubmit: (prompt: string) => void;
   isPartial?: boolean;
@@ -41,6 +48,28 @@ export default function PromptInput({
         />
       </div>
 
+      {!isPartial && !disabled && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[9px] font-mono text-secondary-600 uppercase tracking-widest">
+            — or pick an example —
+          </span>
+          <div className="flex flex-col gap-1.5">
+            {EXAMPLE_PROMPTS.map((example, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setPrompt(example)}
+                className="text-left text-[10px] font-mono text-secondary-400 hover:text-primary-400 border border-secondary-800 hover:border-primary-500/50 bg-[#0a0f16] hover:bg-primary-500/5 px-3 py-2 transition-all duration-150 line-clamp-1 cursor-pointer rounded-none"
+                title={example}
+              >
+                <span className="text-primary-500/60 mr-1.5">#{i + 1}</span>
+                {example}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isPartial && onResume ? (
         <div className="flex flex-col gap-2">
           <button
@@ -77,4 +106,4 @@ export default function PromptInput({
       )}
     </div>
   );
-}
+}

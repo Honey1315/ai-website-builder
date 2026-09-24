@@ -4,7 +4,6 @@ const ALGORITHM = "aes-256-gcm";
 
 function getKey(): Buffer {
   const secret = process.env.TOKEN_ENCRYPTION_SECRET || "default-secret-32-characters-long!";
-  // Hash the secret with SHA-256 to guarantee an exact 32-byte key for AES-256
   return crypto.createHash("sha256").update(secret).digest();
 }
 
@@ -14,7 +13,6 @@ export function encryptToken(plainText: string): string {
   let encrypted = cipher.update(plainText, "utf8", "hex");
   encrypted += cipher.final("hex");
   const authTag = cipher.getAuthTag().toString("hex");
-  // Format: iv:authTag:encrypted
   return `${iv.toString("hex")}:${authTag}:${encrypted}`;
 }
 

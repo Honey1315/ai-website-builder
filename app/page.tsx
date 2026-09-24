@@ -116,23 +116,18 @@ export default defineConfig({
     <div className="min-h-screen bg-[#05080c] text-secondary-50 font-sans overflow-x-hidden selection:bg-primary-500/20 selection:text-primary-300">
       <Navbar />
 
-      {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-8 sm:pt-16 md:pt-20 pb-16 sm:pb-24 relative">
-        {/* Ambient atmospheric glows */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] sm:w-[500px] lg:w-[800px] h-[280px] sm:h-[400px] bg-primary-900/15 blur-[120px] sm:blur-[160px] rounded-full pointer-events-none"></div>
         <div className="absolute top-8 right-4 sm:right-10 w-32 sm:w-48 h-32 sm:h-48 bg-primary-400/5 blur-[80px] rounded-full pointer-events-none"></div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-12 lg:gap-14 items-center relative z-10">
-          {/* Left Content Column */}
           <div className="lg:col-span-7 space-y-6 sm:space-y-8">
             <div className="space-y-4 sm:space-y-6">
-              {/* Badge */}
               <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 border border-primary-500/30 bg-primary-500/5 text-[10px] sm:text-xs font-mono uppercase tracking-[0.18em] text-primary-400">
                 <span className="w-1.5 h-1.5 bg-primary-400 animate-pulse"></span>
                 <span>SYS_V3.5 // MULTI-MODEL AUTONOMOUS REACT ENGINE</span>
               </div>
 
-              {/* Main Headline */}
               <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-display font-light text-white leading-[1.12] tracking-tight break-words">
                 Prompt to <br />
                 Production-Ready <br />
@@ -141,7 +136,6 @@ export default defineConfig({
                 </span>
               </h1>
 
-              {/* Subtitle */}
               <p className="text-xs sm:text-base md:text-lg text-secondary-400 font-light leading-relaxed max-w-2xl">
                 Transform natural language prompts into modular, multi-file Vite + React + Tailwind applications in seconds.
                 Powered by Google Gemini, OpenRouter, and NVIDIA with intelligent fallbacks. Test in an in-browser live Sandpack sandbox,
@@ -149,7 +143,6 @@ export default defineConfig({
               </p>
             </div>
 
-            {/* CTA Action Cluster */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1">
               <Link href="/builder" className="w-full sm:w-auto">
                 <Button
@@ -172,7 +165,6 @@ export default defineConfig({
               </Link>
             </div>
 
-            {/* Performance & Spec Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-secondary-800/80">
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
@@ -209,13 +201,10 @@ export default defineConfig({
             </div>
           </div>
 
-          {/* Right Showcase Column - Interactive System Monitor */}
           <div className="lg:col-span-5 w-full">
             <div className="relative border border-secondary-800 bg-[#0a0f16]/95 backdrop-blur-md shadow-2xl p-3.5 sm:p-5 flex flex-col gap-4 overflow-hidden">
-              {/* Corner tech accent */}
               <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary-500 opacity-60 pointer-events-none"></div>
 
-              {/* Terminal Window Chrome */}
               <div className="flex justify-between items-center border-b border-secondary-800/80 pb-2.5">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <div className="w-2 sm:w-2.5 h-2 sm:h-2.5 bg-danger-500/80"></div>
@@ -231,7 +220,6 @@ export default defineConfig({
                 </div>
               </div>
 
-              {/* Tab Selector (Horizontally scrollable on small mobile) */}
               <div className="flex overflow-x-auto no-scrollbar gap-1 border-b border-secondary-800 text-[10px] font-mono uppercase tracking-wider pb-1">
                 <button
                   onClick={() => setActiveTab("pipeline")}
@@ -259,7 +247,6 @@ export default defineConfig({
                 </button>
               </div>
 
-              {/* Tab 1: Pipeline Telemetry */}
               {activeTab === "pipeline" && (
                 <div className="space-y-3.5 py-1">
                   <div className="space-y-1.5">
@@ -302,7 +289,6 @@ export default defineConfig({
                 </div>
               )}
 
-              {/* Tab 2: Interactive File Tree Explorer */}
               {activeTab === "files" && (
                 <div className="space-y-3 py-1 font-mono text-xs">
                   <div className="flex justify-between items-center text-[10px] text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800">
@@ -310,7 +296,6 @@ export default defineConfig({
                     <span className="text-primary-400">{selectedFile}</span>
                   </div>
 
-                  {/* Clickable File Chips */}
                   <div className="flex flex-wrap gap-1.5">
                     {Object.keys(fileCodeSnippets).map((filename) => (
                       <button
@@ -327,7 +312,6 @@ export default defineConfig({
                     ))}
                   </div>
 
-                  {/* Code Viewer */}
                   <div className="bg-[#05080c] border border-secondary-800 p-2.5 max-h-48 overflow-y-auto overflow-x-auto text-[10px] text-secondary-300 leading-relaxed font-mono select-text">
                     <pre>
                       <code>{fileCodeSnippets[selectedFile]}</code>
@@ -336,7 +320,6 @@ export default defineConfig({
                 </div>
               )}
 
-              {/* Tab 3: Interactive Mini App Preview */}
               {activeTab === "preview" && (
                 <div className="space-y-3 py-1">
                   <div className="flex justify-between items-center text-[10px] font-mono text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800">
@@ -351,7 +334,6 @@ export default defineConfig({
                     </div>
                   </div>
 
-                  {/* Mini Interactive App Canvas */}
                   <div className={`p-3.5 border rounded-none transition-colors ${appTheme === "dark"
                     ? "bg-[#04060a] border-secondary-800 text-white"
                     : "bg-[#071318] border-primary-800/60 text-teal-100"
@@ -398,7 +380,6 @@ export default defineConfig({
                 </div>
               )}
 
-              {/* Tab 4: Cloud Deployment */}
               {activeTab === "deploy" && (
                 <div className="space-y-3 py-1 font-mono">
                   <div className="text-[10px] text-secondary-500 uppercase tracking-widest pb-1 border-b border-secondary-800 flex justify-between">
@@ -436,7 +417,6 @@ export default defineConfig({
                 </div>
               )}
 
-              {/* Status bar */}
               <div className="border-t border-secondary-800/80 pt-2.5 flex items-center justify-between text-[9px] sm:text-[10px] font-mono text-secondary-500">
                 <span>VITE + REACT + TAILWIND</span>
                 <span className="text-primary-400">AUTO_HEALING_&amp;_RESUME_READY</span>
@@ -446,7 +426,6 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* Infinite Scrolling Ticker Tape Marquee */}
       <div className="w-full border-y border-secondary-800 bg-[#070c12] py-2.5 sm:py-3 overflow-hidden">
         <div className="animate-marquee whitespace-nowrap text-[10px] sm:text-xs font-mono uppercase tracking-[0.22em] text-secondary-400">
           <span className="mx-4 flex items-center gap-2">
@@ -512,7 +491,6 @@ export default defineConfig({
         </div>
       </div>
 
-      {/* Core Capabilities Grid Section */}
       <section className="py-16 sm:py-24 md:py-28 border-b border-secondary-800 relative">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="mb-10 sm:mb-16 max-w-3xl">
@@ -614,7 +592,6 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* How It Works / Workflow */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-16 sm:py-24 md:py-28">
         <div className="mb-10 sm:mb-16">
           <div className="text-[10px] sm:text-xs font-mono text-primary-400 uppercase tracking-widest mb-2.5 flex items-center gap-2">
@@ -680,7 +657,6 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* Comparison: Why AI Website Builder */}
       <section className="border-t border-secondary-800 bg-[#060a10] py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="mb-10 sm:mb-14 text-center max-w-2xl mx-auto">
@@ -738,11 +714,9 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* Navigation Quick Access (Cyberpunk Panels) */}
       <section className="border-t border-secondary-800 bg-[#070b10] py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            {/* Builder Workspace */}
             <Link href="/builder">
               <div className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-6 sm:w-8 h-6 sm:h-8 border-t-2 border-r-2 border-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -763,7 +737,6 @@ export default defineConfig({
               </div>
             </Link>
 
-            {/* Project Repository */}
             <Link href="/projects">
               <div className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-6 sm:w-8 h-6 sm:h-8 border-t-2 border-r-2 border-primary-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -784,7 +757,6 @@ export default defineConfig({
               </div>
             </Link>
 
-            {/* Authentication Portal */}
             <div
               onClick={() => signInWithGoogle('/builder')}
               className="h-full p-5 sm:p-7 border border-secondary-800 bg-secondary-900/70 hover:border-primary-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden"
@@ -809,9 +781,7 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* Full Width CTA Banner */}
       <section className="bg-gradient-to-b from-primary-950/20 to-[#05080c] border-t border-primary-900/40 py-16 sm:py-24 relative overflow-hidden">
-        {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(var(--color-primary-400) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary-400) 1px, transparent 1px)', backgroundSize: '36px 36px' }}></div>
 
         <div className="max-w-4xl mx-auto px-3 sm:px-6 text-center relative z-10 space-y-5 sm:space-y-6">
@@ -852,7 +822,6 @@ export default defineConfig({
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-[#03060a] border-t border-secondary-800 py-8 sm:py-10">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6 text-center sm:text-left">
           <div className="flex items-center gap-3">

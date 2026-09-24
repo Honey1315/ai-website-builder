@@ -18,9 +18,7 @@ export async function getUser() {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               );
-            } catch {
-              // Can be ignored if called from a Server Component and middleware is in place
-            }
+            } catch {}
           },
         },
       }

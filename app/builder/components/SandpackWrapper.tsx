@@ -23,14 +23,11 @@ interface SandpackWrapperProps {
 
 function cleanErrorMessage(raw: string): string {
   if (!raw) return "";
-  // Strip leading Uncaught Error prefixes
   let msg = raw.replace(/^Uncaught\s+([A-Za-z]*Error:\s*)?/, "");
-  // Replace long bundler CDN bundle URLs with clean module identifiers
   msg = msg.replace(
     /https?:\/\/[^\s'"]+\/(?:node_modules\/\.vite\/deps\/)?([a-zA-Z0-9_@.-]+)\.js\?[^\s'"]*/g,
     "'$1'"
   );
-  // Normalize redundant adjacent quotes if any
   msg = msg.replace(/''([a-zA-Z0-9_@.-]+)''/g, "'$1'");
   return msg.trim();
 }
@@ -49,7 +46,6 @@ function SandpackErrorObserver({
       const cleaned = cleanErrorMessage(rawError);
       if (!cleaned) return;
 
-      // Don't overwrite an existing specific error with a generic render error message
       if (
         activeErrorRef.current &&
         (cleaned.includes("[PREVIEW_RENDER_ERROR]") ||
@@ -65,7 +61,6 @@ function SandpackErrorObserver({
         clearTimeout(timerRef.current);
       }
 
-      // 400ms debounce ensures errors are promptly delivered to auto-fix and chat
       timerRef.current = setTimeout(() => {
         if (activeErrorRef.current) {
           onErrorChange?.(activeErrorRef.current);
@@ -84,14 +79,12 @@ function SandpackErrorObserver({
     onErrorChange?.(null);
   }, [onErrorChange]);
 
-  // 1. Listen to Sandpack internal bundler errors
   useEffect(() => {
     if (sandpack.error) {
       notifyError(sandpack.error.message);
     }
   }, [sandpack.error, notifyError]);
 
-  // 2. Listen to Sandpack protocol messages
   useEffect(() => {
     const unsubscribe = listen((message: any) => {
       if (message.type === "action" && message.action === "show-error") {
@@ -111,7 +104,6 @@ function SandpackErrorObserver({
     };
   }, [listen, notifyError]);
 
-  // 3. Listen to cross-frame postMessage events sent from /public/index.html and /index.js
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
@@ -122,7 +114,6 @@ function SandpackErrorObserver({
           notifyError(msg);
         }
       } else if (event.data.type === "SANDPACK_PREVIEW_SUCCESS") {
-        // Only clear when there are genuinely no bundler or runtime errors
         if (!sandpack.error) {
           clearError();
         }
@@ -378,7 +369,6 @@ export default function SandpackWrapper({
   const sandpackFiles: SandpackFileMap = { ...BASE_FILES };
 
   const safeDependencies = useMemo(() => {
-    // 1. Sanitize incoming dependencies from manifest / props
     const rawDeps: Record<string, string> = {};
     if (dependencies) {
       for (const [key, value] of Object.entries(dependencies)) {
@@ -389,7 +379,6 @@ export default function SandpackWrapper({
     }
     const sanitizedFromProps = sanitizeDependencies(rawDeps);
 
-    // 2. Auto-detect any packages imported in files that weren't declared in manifest
     const autoDetectedDeps: Record<string, string> = {};
     if (files && files.length > 0) {
       for (const file of files) {
@@ -430,11 +419,8 @@ export default function SandpackWrapper({
   );
 
   if (files && files.length > 0) {
-    // Merge provided files — normalize paths to absolute sandpack keys
     files.forEach((file) => {
       const key = file.name.startsWith("/") ? file.name : `/${file.name}`;
-      // Never pass build/config files or internal entry wrappers to the in-browser Sandpack bundler.
-      // Sandpack handles dependencies via customSetup.dependencies, and Tailwind via CDN.
       if (
         key === "/package.json" ||
         key === "/package-lock.json" ||
@@ -453,7 +439,6 @@ export default function SandpackWrapper({
       sandpackFiles[key] = { code: file.content, hidden: false };
     });
 
-    // If project has App.jsx at root instead of /src/App.jsx, ensure /src/App.jsx is mapped
     if (sandpackFiles["/App.jsx"] && !sandpackFiles["/src/App.jsx"]) {
       sandpackFiles["/src/App.jsx"] = sandpackFiles["/App.jsx"];
     }

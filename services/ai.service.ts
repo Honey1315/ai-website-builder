@@ -44,8 +44,6 @@ import { FileMetadata, FileSummary, ProjectManifest, ValidationMismatch } from "
 
 const MAX_FIX_ROUNDS = 2;
 
-// Inter-request pace delay — prevents tripping free-tier RPM rate limits
-// on OpenRouter / NVIDIA community pools when generating multi-file projects.
 const GENERATION_PACE_MS = 550;
 
 function sleep(ms: number): Promise<void> {
@@ -127,15 +125,9 @@ export class AIService {
     return extractManifest(result) || createFallbackManifest(prompt, structure);
   }
 
-  /**
-   * Extracts a FileSummary from generated file content using LOCAL regex/AST parsing.
-   * Zero LLM calls, zero API cost, zero rate-limit risk. Runs in < 1ms.
-   * Replaces the former LLM-based approach to cut per-project API traffic by ~50%.
-   */
   static generateFileSummary(
     fileName: string,
     content: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _options?: ProviderOptions
   ): FileSummary {
     return localFileSummary(fileName, content);
@@ -239,7 +231,6 @@ export class AIService {
           prompt, structure, manifest, fileName, summaries, fileMismatches, options, Array.from(fileMap.values())
         );
         fileMap.set(fileName, regenerated);
-        // Local extraction — no LLM call needed
         summaries.set(fileName, AIService.generateFileSummary(fileName, regenerated.content));
         await sleep(GENERATION_PACE_MS);
       }
@@ -258,16 +249,14 @@ export class AIService {
       const manifest = await AIService.generateManifest(prompt, structure, options);
       const generatedFiles: FileData[] = [];
       const summaries = new Map<string, FileSummary>();
-      console.log("orderedManifestFiles", orderedManifestFiles(manifest));
+      //console.log("orderedManifestFiles", orderedManifestFiles(manifest));
       for (const fileName of orderedManifestFiles(manifest)) {
-        // Skip static system foundation files - they are provided by the environment
         if (STATIC_SYSTEM_FILES.has(fileName)) continue;
 
         const file = await AIService.generateProjectFile(
           prompt, structure, manifest, fileName, summaries, [], options, generatedFiles
         );
         generatedFiles.push(file);
-        // Update summaries with real extracted signatures immediately (code is ground truth)
         summaries.set(fileName, AIService.generateFileSummary(fileName, file.content));
         await sleep(GENERATION_PACE_MS);
       }
@@ -383,13 +372,12 @@ export class AIService {
 
         const extracted = extractMultipleFiles(result);
         if (extracted.length > 0) {
-          // If extractor defaulted to App.jsx because of missing // FILE: marker, bind to targetFile.name
           for (const item of extracted) {
             if (extracted.length === 1 && item.name === "src/App.jsx" && targetFile.name !== "src/App.jsx") {
               item.name = targetFile.name;
             }
           }
-          console.log("extracted: ", extracted);
+          //console.log("extracted: ", extracted);
           if (AIService.detectTruncatedOutput(extracted)) {
             const errorMsg = `Refinement produced incomplete output for ${targetFile.name}.`;
             onEvent?.({ type: "error", error: errorMsg });
@@ -433,7 +421,6 @@ export class AIService {
         );
         const revalidation = AIService.validateGeneratedFiles(manifest, finalFiles);
         if (revalidation.mismatches.length > 0) {
-          // Only abort if there are hard structural failures (e.g. broken imports or missing component exports)
           const hardErrors = revalidation.mismatches.filter(
             (m) => m.type === "missing_dependency" || m.type === "export_mismatch"
           );
@@ -454,7 +441,6 @@ export class AIService {
         ? `Updated ${modifiedFileNames.join(", ")}.`
         : "Refinement completed.";
 
-      // Dynamically evolve manifest contracts and package dependencies
       const evolvedMetadata = buildMetadataMap(finalFiles);
       const updatedComponents = manifest.components.map((comp) => {
         const filePath = findComponentFile(manifest, comp.name);
@@ -551,7 +537,6 @@ export class AIService {
       return filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || null;
     };
 
-    // 1. Downward expansion: add children imported by selected files
     for (const filePath of selectedFiles) {
       const componentName = getComponentName(filePath);
       if (!componentName) continue;
@@ -565,7 +550,6 @@ export class AIService {
       }
     }
 
-    // 2. Upward expansion: ensure caller components (like App.jsx) stay synchronized
     for (const filePath of selectedFiles) {
       const componentName = getComponentName(filePath);
       if (!componentName || componentName === "App") continue;

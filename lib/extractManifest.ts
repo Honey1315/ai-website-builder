@@ -114,7 +114,6 @@ function normalizeFilePath(fileName: string): string {
     .replace(/^\/+/, "")
     .replace(/^\.\/+/, "");
 
-  // Don't prepend src/ to Vite config and root HTML
   if (["index.html", "vite.config.js"].includes(normalized)) {
     return normalized;
   }
@@ -178,8 +177,8 @@ export function createFallbackManifest(
   structure: string[] = []
 ): ProjectManifest {
   const files = structure.length > 0
-      ? ensureRequiredFiles(structure)
-      : [...DEFAULT_FILES];
+    ? ensureRequiredFiles(structure)
+    : [...DEFAULT_FILES];
 
   const components = files
     .filter((file) => file.startsWith("src/components/"))

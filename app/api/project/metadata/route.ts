@@ -11,7 +11,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Rate limit: 20 metadata requests per user per 10 minutes
     const rl = checkRateLimit(`metadata:${userId}`, 20, 10 * 60 * 1000);
     if (!rl.allowed) {
       return NextResponse.json(

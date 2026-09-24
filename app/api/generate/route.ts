@@ -23,13 +23,10 @@ import {
 import { getAffectedFiles } from "@/lib/contractValidation";
 
 import type {
-  FileMetadata,
   FileSummary,
   ProjectManifest,
-  ValidationMismatch,
 } from "@/types/contract";
 
-// Inter-request pace delay — prevents bursting free-tier RPM limits when generating multi-file projects
 const GENERATION_PACE_MS = 550;
 
 function sleep(ms: number): Promise<void> {
@@ -166,14 +163,13 @@ async function runContractFirstStream(
     fileNames = orderedManifestFiles(manifest).filter(isCodegenFile);
     generatedFiles = [...resumeContext.existingFiles];
 
-    // Populate summaries from non-placeholder files that are already completed
+
     for (const f of resumeContext.existingFiles) {
       if (!isPlaceholderFile(f)) {
         summaries.set(f.name, localFileSummary(f.name, f.content));
       }
     }
 
-    // Only generate files that do not yet have completed summaries
     filesToGenerate = fileNames.filter((name) => !summaries.has(name));
     controller.enqueue(streamEvent({ type: "structure", files: generatedFiles }));
   } else {
@@ -267,7 +263,6 @@ async function runContractFirstStream(
     }
   }
 
-  // If completed all files, run validation & auto-fix
   let validation = AIService.validateGeneratedFiles(manifest, generatedFiles);
   controller.enqueue(
     streamEvent({
@@ -348,12 +343,10 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await getAuthUserId(request);
 
-    // Freemium model: guests can generate but get a tighter rate limit.
-    // Authenticated users get a higher allowance.
     const rateLimitKey = userId
       ? `generate:user:${userId}`
       : `generate:ip:${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}`;
-    const rateLimitMax = userId ? 10 : 3; // 10 for signed-in, 3 for guests
+    const rateLimitMax = userId ? 10 : 3;
 
     const rl = checkRateLimit(rateLimitKey, rateLimitMax, 10 * 60 * 1000);
     if (!rl.allowed) {

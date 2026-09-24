@@ -26,7 +26,6 @@ export async function POST(request: NextRequest) {
       code
     );
 
-    // Return zip as attachment
     return new NextResponse(zipBlob, {
       headers: {
         "Content-Type": "application/zip",

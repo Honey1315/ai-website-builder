@@ -9,9 +9,9 @@ function IconBase({ children, ...props }: IconProps) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.2} // Thinner stroke for a technical look
-      strokeLinecap="square" // Squared caps instead of round
-      strokeLinejoin="miter" // Miter joins instead of round
+      strokeWidth={1.2}
+      strokeLinecap="square"
+      strokeLinejoin="miter"
       width="1em"
       height="1em"
       aria-hidden="true"
@@ -22,7 +22,6 @@ function IconBase({ children, ...props }: IconProps) {
   );
 }
 
-// Keep all exports exactly the same to preserve functionality
 export function IconSparkles(props: IconProps) {
   return (
     <IconBase {...props}>

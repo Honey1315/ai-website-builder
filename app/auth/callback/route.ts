@@ -8,6 +8,16 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code');
   const next = requestUrl.searchParams.get('next') || '/';
 
+  const errorParam = requestUrl.searchParams.get('error');
+  const errorDesc = requestUrl.searchParams.get('error_description') || requestUrl.searchParams.get('error_code');
+
+  if (errorParam) {
+    console.error('Supabase OAuth callback returned error:', errorParam, errorDesc);
+    return NextResponse.redirect(
+      new URL(`/auth/error?error=${encodeURIComponent(errorDesc || errorParam)}`, requestUrl.origin)
+    );
+  }
+
   if (code) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -23,25 +33,27 @@ export async function GET(request: Request) {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               );
-            } catch {
-              // Ignore in read-only contexts
-            }
+            } catch {}
           },
         },
       }
     );
 
-    // Exchange code for session
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
+    if (exchangeError) {
+      console.error('Supabase exchangeCodeForSession failed:', exchangeError.message, exchangeError);
+      return NextResponse.redirect(
+        new URL(`/auth/error?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin)
+      );
+    }
+
     if (!exchangeError) {
-      // Get the user data from Supabase
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (user) {
-        // Create or update user in our database
         try {
           await prisma.user.upsert({
             where: { id: user.id },
@@ -67,18 +79,15 @@ export async function GET(request: Request) {
     }
   }
 
-  // Safe redirect: decode then re-validate to prevent encoded bypass attacks (e.g. /%2F/evil.com).
-  // Build the target URL against our own origin — if `next` is absolute or escapes the origin
-  // after normalisation, Next.js will throw and we fall back to '/'.
   let safeRedirectUrl: URL;
   try {
     const decoded = decodeURIComponent(next);
-    // Must start with '/' and must not be a protocol-relative URL
     if (!decoded.startsWith('/') || decoded.startsWith('//')) throw new Error('invalid');
-    // Construct against origin — this normalises traversal sequences
     const candidate = new URL(decoded, requestUrl.origin);
-    // Final guard: the resolved origin must still match ours
     if (candidate.origin !== requestUrl.origin) throw new Error('origin mismatch');
+    candidate.searchParams.delete('error');
+    candidate.searchParams.delete('error_code');
+    candidate.searchParams.delete('error_description');
     safeRedirectUrl = candidate;
   } catch {
     safeRedirectUrl = new URL('/', requestUrl.origin);

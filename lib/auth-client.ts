@@ -1,16 +1,23 @@
 import { createBrowserClient } from '@supabase/ssr';
 
-/**
- * Initiates Google OAuth authentication directly in-place from any component.
- * @param next Optional relative path to return to after successful authentication (defaults to current pathname).
- */
 export async function signInWithGoogle(next?: string) {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const targetPath = next || (typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/');
+  let targetPath = next;
+  if (!targetPath && typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('error');
+    url.searchParams.delete('error_code');
+    url.searchParams.delete('error_description');
+    url.searchParams.delete('code');
+    const search = url.searchParams.toString();
+    targetPath = url.pathname + (search ? `?${search}` : '');
+  }
+  if (!targetPath) targetPath = '/';
+
   const redirectUrl = new URL('/auth/callback', typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
   
   if (targetPath && targetPath !== '/') {

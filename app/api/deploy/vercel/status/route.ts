@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     const data = await statusRes.json();
 
     return NextResponse.json({
-      status: data.readyState, // QUEUED, BUILDING, READY, ERROR, CANCELED
+      status: data.readyState,
       url: data.url ? `https://${data.url}` : null,
       error: data.error?.message,
     });

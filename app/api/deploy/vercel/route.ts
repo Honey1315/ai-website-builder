@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing GitHub repository full name" }, { status: 400 });
     }
 
-    // Always prioritize the repository name for the Vercel project and URL
     const repoNameOnly = repoFullName.includes('/') ? repoFullName.split('/')[1] : repoFullName;
     const targetName = repoNameOnly || projectName || "ai-website";
     const finalProjectName = targetName
@@ -58,7 +57,6 @@ export async function POST(request: NextRequest) {
       .replace(/^-|-$/g, '')
       .slice(0, 100);
 
-    // 1. Create Vercel Project
     const createProjectRes = await fetch("https://api.vercel.com/v9/projects", {
       method: "POST",
       headers: {
@@ -75,7 +73,6 @@ export async function POST(request: NextRequest) {
       }),
     });
 
-    // If 409, it might already exist. We can try to proceed anyway.
     if (!createProjectRes.ok && createProjectRes.status !== 409) {
       const errorData = await createProjectRes.json().catch(() => ({}));
       return NextResponse.json(
@@ -83,30 +80,24 @@ export async function POST(request: NextRequest) {
         { status: createProjectRes.status }
       );
     }
-    
-    // We don't strictly need the project ID to deploy, the repoId + name is enough in v13
 
-    // Get the repo ID from GitHub to use for gitSource
+
     const githubRes = await fetch(`https://api.github.com/repos/${repoFullName}`, {
-       headers: {
-          "Accept": "application/vnd.github.v3+json",
-          // Don't need auth just for public repo ID, but we might if it's private.
-          // Since we created it, we can fetch it if we pass the same token, but we don't have it here.
-          // Better: pass repoId from the client. Let's adjust the frontend to pass it.
-       }
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+      }
     });
 
     let repoId = bodyRepoId;
     if (!repoId) {
-        const ghData = await githubRes.json();
-        repoId = ghData.id;
+      const ghData = await githubRes.json();
+      repoId = ghData.id;
     }
 
     if (!repoId) {
-        return NextResponse.json({ error: "Could not resolve GitHub Repository ID" }, { status: 400 });
+      return NextResponse.json({ error: "Could not resolve GitHub Repository ID" }, { status: 400 });
     }
 
-    // 2. Trigger Deployment
     const deployRes = await fetch("https://api.vercel.com/v13/deployments", {
       method: "POST",
       headers: {

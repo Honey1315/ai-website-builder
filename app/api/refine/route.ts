@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Rate limit: 30 refinements per user per 10 minutes
     const rl = checkRateLimit(`refine:${userId}`, 30, 10 * 60 * 1000);
     if (!rl.allowed) {
       return NextResponse.json(
@@ -71,8 +70,8 @@ export async function POST(request: NextRequest) {
 
     const sanitizedMessages: ChatMessage[] = Array.isArray(messages)
       ? messages
-          .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-          .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }))
+        .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }))
       : [];
 
     const options = resolveProviderOptions(body);
@@ -87,7 +86,7 @@ export async function POST(request: NextRequest) {
             try {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             } catch {
-              // Ignore if stream closed
+
             }
           };
 
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
               send
             );
 
-            // If project is already saved in the database, sync messages in real time
+
             if (projectId && !result.error) {
               try {
                 const existing = await prisma.projects.findUnique({
@@ -141,7 +140,7 @@ export async function POST(request: NextRequest) {
           } finally {
             try {
               controller.close();
-            } catch {}
+            } catch { }
           }
         },
       });
@@ -168,7 +167,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    // If this project is already saved in the database, sync the new messages in real-time
+
     if (projectId) {
       try {
         const existing = await prisma.projects.findUnique({

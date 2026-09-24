@@ -4,12 +4,6 @@ import { isModelHealthy, tripModel } from "@/lib/circuitBreaker";
 import { MODEL_CATALOG } from "@/utils/constants";
 import { withTimeout } from "@/lib/timeout";
 
-// ---------------------------------------------------------------------------
-// Gemini Client (singleton)
-// ---------------------------------------------------------------------------
-
-// Model list is sourced from MODEL_CATALOG.gemini so constants.ts is the
-// single place to add/remove/reorder Gemini models.
 function getGeminiModels(): string[] {
   return MODEL_CATALOG.gemini.models;
 }
@@ -31,7 +25,6 @@ function getGeminiClient(): GoogleGenerativeAI {
   return geminiClient;
 }
 
-// Safety settings: disable all blocks so code generation is never refused
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -39,15 +32,9 @@ const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
-// ---------------------------------------------------------------------------
-// Message Conversion (OpenAI chat format -> Gemini format)
-// ---------------------------------------------------------------------------
-
 function convertToGeminiHistory(
   messages: ChatMessage[]
 ): { role: "user" | "model"; parts: { text: string }[] }[] {
-  // Gemini uses "user" and "model" roles (not "assistant")
-  // System messages are prepended to the first user message
   const systemParts: string[] = [];
   const history: { role: "user" | "model"; parts: { text: string }[] }[] = [];
 
@@ -58,7 +45,7 @@ function convertToGeminiHistory(
       const text = systemParts.length > 0
         ? `${systemParts.join("\n\n")}\n\n${msg.content}`
         : msg.content;
-      systemParts.length = 0; // Clear after attaching to first user message
+      systemParts.length = 0;
       history.push({ role: "user", parts: [{ text }] });
     } else if (msg.role === "assistant") {
       history.push({ role: "model", parts: [{ text: msg.content }] });
@@ -68,15 +55,6 @@ function convertToGeminiHistory(
   return history;
 }
 
-// ---------------------------------------------------------------------------
-// Core Gemini Call
-// ---------------------------------------------------------------------------
-
-/**
- * Calls Google Gemini directly via the official SDK.
- * Model order comes from MODEL_CATALOG.gemini — update constants.ts to
- * change/reorder models without touching this file.
- */
 export async function callGemini(
   messages: ChatMessage[],
   options: { temperature?: number; maxTokens?: number; model?: string } = {}
@@ -90,8 +68,6 @@ export async function callGemini(
       ? options.model
       : catalog.defaultModel;
 
-  // The explicitly selected/preferred model is always attempted first (user choice overrides cooldown).
-  // Remaining catalog models serve as fallbacks only if they are healthy.
   const fallbackModels = catalog.models
     .filter((m) => m !== preferredModel)
     .filter(isModelHealthy);
@@ -119,15 +95,12 @@ export async function callGemini(
       if (history.length === 0) {
         throw new Error("No messages to send to Gemini");
       }
-
-      // Use the last user message as the current turn; everything before is history
       const lastMsg = history[history.length - 1];
       const priorHistory = history.slice(0, -1);
 
       let result: string;
 
       if (priorHistory.length === 0) {
-        // Single-turn: just call generateContent directly with 35s timeout
         const response = await withTimeout(
           model.generateContent(lastMsg.parts[0].text),
           35000,
@@ -135,7 +108,6 @@ export async function callGemini(
         );
         result = response.response.text();
       } else {
-        // Multi-turn: use a chat session with 35s timeout
         const chat = model.startChat({ history: priorHistory });
         const response = await withTimeout(
           chat.sendMessage(lastMsg.parts[0].text),
@@ -154,9 +126,6 @@ export async function callGemini(
       return result;
     } catch (err: any) {
       console.warn(`[Gemini] Model "${modelId}" failed:`, err?.message || err);
-
-      // Trip the model on quota/rate-limit or timeout errors so the circuit breaker
-      // routes around it for the configured cooldown window
       if (
         err?.status === 429 ||
         err?.status === 503 ||
@@ -173,9 +142,6 @@ export async function callGemini(
   throw lastError || new Error("All Gemini models failed or are in cooldown");
 }
 
-/**
- * Returns true if a Gemini API key is configured in the environment.
- */
 export function isGeminiAvailable(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }

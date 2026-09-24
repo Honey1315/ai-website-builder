@@ -54,7 +54,6 @@ export default function PreviewPanel({ error, onAutoFix }: PreviewPanelProps) {
   const [viewport, setViewport] = useState<ViewportMode>("desktop");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // After hydration: default to mobile viewport on small screens
   useEffect(() => {
     if (window.innerWidth < 768) setViewport("mobile");
   }, []);
@@ -90,7 +89,6 @@ export default function PreviewPanel({ error, onAutoFix }: PreviewPanelProps) {
           : "w-full h-full flex flex-col bg-[#05080c] overflow-hidden relative group"
       }
     >
-      {/* Corner accent */}
       {!isFullscreen && (
         <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-secondary-700 opacity-50 z-10 pointer-events-none"></div>
       )}
@@ -110,9 +108,7 @@ export default function PreviewPanel({ error, onAutoFix }: PreviewPanelProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Responsive Viewport Switcher */}
           <div className="flex items-center bg-[#0a0f16] border border-secondary-800 p-0.5 shrink-0">
-            {/* Desktop - hidden on small screens */}
             {(["desktop", "tablet"] as ViewportMode[]).map((mode) => {
               const isActive = viewport === mode;
               const config = VIEWPORT_CONFIG[mode];
@@ -134,7 +130,6 @@ export default function PreviewPanel({ error, onAutoFix }: PreviewPanelProps) {
                 </button>
               );
             })}
-            {/* Mobile - always visible */}
             {(() => {
               const mode: ViewportMode = "mobile";
               const isActive = viewport === mode;
@@ -158,7 +153,6 @@ export default function PreviewPanel({ error, onAutoFix }: PreviewPanelProps) {
               );
             })()}
           </div>
-          {/* Fullscreen Toggle */}
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}

@@ -113,7 +113,6 @@ export function resolveHealthyCandidates(
 
   if (healthy.length > 0) return healthy;
 
-  // Emergency: all tripped -> pick the one closest to recovering
   const unhealthy = getUnhealthyModels().filter(({ modelId }) =>
     catalog.models.includes(modelId)
   );
@@ -160,9 +159,6 @@ export async function callOpenRouter(
   const temperature = options.temperature ?? 0.1;
   const candidates = resolveHealthyCandidates(provider, options.model);
 
-  // -------------------------------------------------------------
-  // OpenRouter path - Native Edge Gateway Multi-Model Routing
-  // -------------------------------------------------------------
   if (provider === "openrouter") {
     if (!getOpenRouterApiKey()) {
       throw new Error("OPENROUTER_API_KEY is not set - add it to .env.local and restart the dev server");
@@ -171,7 +167,6 @@ export async function callOpenRouter(
     const [primary, ...fallbacks] = candidates;
 
     try {
-      // Pass primary to 'model' and fallbacks to 'models' with provider.allow_fallbacks
       const requestPayload: any = {
         model: primary,
         messages,
@@ -192,7 +187,6 @@ export async function callOpenRouter(
         `OpenRouter request for "${primary}" timed out after 35s`
       );
 
-      // Detect which model actually served the request
       const servedBy: string = (response as any)?.model || primary;
       if (servedBy !== primary) {
         console.info(
@@ -204,7 +198,6 @@ export async function callOpenRouter(
       const content = extractResponseContent(response, servedBy);
       if (content === null) {
         tripModel(servedBy);
-        // Fallback sequentially through remaining candidates
         return await openRouterFallbackLoop(
           messages,
           temperature,
@@ -217,7 +210,6 @@ export async function callOpenRouter(
       console.warn(`[OpenRouter] Gateway request failed for "${primary}":`, err?.message || err);
       tripModel(primary, err);
 
-      // Fallback sequentially to remaining healthy candidates if any
       const remaining = candidates.slice(1).filter(isModelHealthy);
       if (remaining.length > 0) {
         return await openRouterFallbackLoop(messages, temperature, remaining);
@@ -227,9 +219,6 @@ export async function callOpenRouter(
     }
   }
 
-  // -------------------------------------------------------------
-  // NVIDIA NIM path - Sequential fallback with Circuit Breaker
-  // -------------------------------------------------------------
   const config = getNVIDIAConfig();
   let lastError: unknown;
 
@@ -267,9 +256,6 @@ export async function callOpenRouter(
   throw lastError || new Error("All NVIDIA models failed or are currently in cooldown");
 }
 
-/**
- * Sequential fallback loop for OpenRouter when edge-gateway batch partially failed or returned empty payload.
- */
 async function openRouterFallbackLoop(
   messages: ChatMessage[],
   temperature: number,

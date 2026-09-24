@@ -31,7 +31,6 @@ export default function ChatPanel({
   const [isSigningIn, setIsSigningIn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom of chat when messages or loading state updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -79,7 +78,6 @@ export default function ChatPanel({
       )}
 
       {!isAuthenticated ? (
-        // ── Unauthenticated state ──────────────────────────────────────────────
         <div className="h-48 flex flex-col items-center justify-center gap-4 border border-secondary-800 bg-[#0a0f16] p-6 text-center shrink-0">
           <div className="text-[10px] font-mono text-secondary-600 uppercase tracking-widest">
             Refine_Module
@@ -103,9 +101,7 @@ export default function ChatPanel({
           </button>
         </div>
       ) : (
-        // ── Authenticated state ────────────────────────────────────────────────
         <>
-          {/* Conversation History Stream */}
           {messages.length > 0 && (
             <div className="max-h-64 sm:max-h-72 overflow-y-auto p-3 bg-[#05080c] border border-secondary-800 flex flex-col gap-3 font-mono text-xs">
               {messages.map((msg, index) => (
@@ -156,7 +152,6 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Prompt Input Box */}
           <div className="relative shrink-0">
             <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-primary-500 z-10 pointer-events-none"></div>
             <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-primary-500 z-10 pointer-events-none"></div>

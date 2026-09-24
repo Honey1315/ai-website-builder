@@ -149,15 +149,10 @@ export function orderedManifestFiles(manifest: ProjectManifest): string[] {
 
   files.sort((a, b) => {
     const rank = (file: string) => {
-      // Configuration files and HTML first
       if (file.endsWith(".config.js") || file === "index.html") return 0;
-      // Data models, mock datasets, types, and utility constants FIRST so concrete schemas exist for components
       if (isDataOrUtilFile(file)) return 1;
-      // Main entry and Tailwind setup
       if (file === "src/main.jsx" || file === "src/index.css") return 2;
-      // Reusable components
       if (file.includes("/components/")) return 3;
-      // App.jsx root component LAST so it can wire together components and data
       if (file.endsWith("App.jsx")) return 4;
       return 5;
     };
@@ -168,11 +163,6 @@ export function orderedManifestFiles(manifest: ProjectManifest): string[] {
   return files;
 }
 
-/**
- * Scans all project files for local relative imports (e.g. ./Component or ../Component).
- * If any imported local file is missing from the project files list, synthesizes a safe,
- * neutral placeholder component so Vite never crashes with "Failed to resolve import".
- */
 export function ensureMissingImportsExist(files: FileData[]): FileData[] {
   const result = [...files];
   const fileNames = new Set(files.map((f) => f.name.replace(/^\/+/, "")));
@@ -197,9 +187,9 @@ export function ensureMissingImportsExist(files: FileData[]): FileData[] {
       const defaultImport = match[1]?.trim();
       const namedImports = match[2]
         ? match[2]
-            .split(",")
-            .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
-            .filter(Boolean)
+          .split(",")
+          .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
+          .filter(Boolean)
         : [];
       const importPath = match[3]?.trim();
 
@@ -207,7 +197,6 @@ export function ensureMissingImportsExist(files: FileData[]): FileData[] {
 
       const resolved = resolveRelativePath(file.name, importPath);
 
-      // Skip base foundation files
       if (
         resolved.endsWith(".css") ||
         resolved === "src/index.css" ||
@@ -261,9 +250,6 @@ ${namedExportsCode ? "\n" + namedExportsCode : ""}
   return result;
 }
 
-/**
- * Determines whether a file is an ungenerated placeholder or contains real code.
- */
 export function isPlaceholderFile(file?: { name: string; content?: string } | null): boolean {
   if (!file || !file.content || !file.content.trim()) return true;
   const content = file.content.trim();
