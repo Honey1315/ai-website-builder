@@ -210,6 +210,8 @@ function BuilderPageInner() {
     }
     setTimeout(() => setDraftNotification(""), 7000);
     setPendingDraft(null);
+    isSavedToCloud.current = false;
+    setHasUnsavedWork(true);
   }, []);
 
   const handleDiscardDraft = useCallback(() => {
@@ -217,6 +219,8 @@ function BuilderPageInner() {
       localStorage.removeItem("ai_builder_draft");
     }
     setPendingDraft(null);
+    isSavedToCloud.current = true;
+    setHasUnsavedWork(false);
     setDraftNotification("Unsaved draft deleted.");
     setTimeout(() => setDraftNotification(""), 4000);
   }, []);
@@ -244,6 +248,8 @@ function BuilderPageInner() {
             timestamp: Date.now(),
           })
         );
+        isSavedToCloud.current = false;
+        setHasUnsavedWork(true);
       } catch (e) {
         console.error("Failed to auto-save draft:", e);
       }
@@ -262,6 +268,8 @@ function BuilderPageInner() {
     setRefineStatus("");
     if (files.length > 0) {
       setIsPartialGeneration(true);
+      isSavedToCloud.current = false;
+      setHasUnsavedWork(true);
     }
   }, [files.length]);
 
@@ -323,6 +331,8 @@ function BuilderPageInner() {
     if (normalized === "src/App.jsx" || normalized.endsWith("App.jsx")) {
       setCode(updatedCode);
     }
+    isSavedToCloud.current = false;
+    setHasUnsavedWork(true);
   }, [code, pushHistory, syncUndoRedoState]);
 
   const handleExportZip = async () => {
@@ -366,24 +376,47 @@ function BuilderPageInner() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  const isDirty = hasUnsavedWork || (files.length > 0 && !isSavedToCloud.current);
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedWork) {
+      if (isDirty) {
         e.preventDefault();
+        e.returnValue = "";
+        return "";
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedWork]);
+  }, [isDirty]);
 
   const safeNavigate = useCallback((href: string) => {
-    if (hasUnsavedWork) {
+    if (isDirty) {
       pendingRouteRef.current = href;
       setShowLeaveWarning(true);
     } else {
       router.push(href);
     }
-  }, [hasUnsavedWork, router]);
+  }, [isDirty, router]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+
+    window.history.pushState({ unsavedGuard: true }, "", window.location.href);
+
+    const handlePopState = () => {
+      if (isDirty) {
+        window.history.pushState({ unsavedGuard: true }, "", window.location.href);
+        pendingRouteRef.current = "/projects";
+        setShowLeaveWarning(true);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isDirty]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -489,6 +522,8 @@ function BuilderPageInner() {
             console.error("Failed to parse package.json from loaded project", e);
           }
         }
+        isSavedToCloud.current = true;
+        setHasUnsavedWork(false);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -1303,6 +1338,7 @@ function BuilderPageInner() {
                 onClick={() => {
                   setShowLeaveWarning(false);
                   setHasUnsavedWork(false);
+                  isSavedToCloud.current = true;
                   if (pendingRouteRef.current) {
                     router.push(pendingRouteRef.current);
                   }
@@ -1442,6 +1478,8 @@ function BuilderPageInner() {
                 setManifest(null);
                 setOriginalPrompt("");
                 localStorage.removeItem("ai_builder_draft");
+                isSavedToCloud.current = true;
+                setHasUnsavedWork(false);
               }}
               disabled={loading}
               initialPrompt={originalPrompt}
@@ -1508,6 +1546,8 @@ function BuilderPageInner() {
                     setManifest(null);
                     setOriginalPrompt("");
                     localStorage.removeItem("ai_builder_draft");
+                    isSavedToCloud.current = true;
+                    setHasUnsavedWork(false);
                   }}
                   className="px-3 py-2 border border-secondary-700 bg-secondary-900/60 hover:bg-secondary-800 text-secondary-400 hover:text-white uppercase tracking-wider text-[10px] transition-colors cursor-pointer"
                 >
