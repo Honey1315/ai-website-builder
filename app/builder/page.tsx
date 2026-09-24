@@ -512,6 +512,12 @@ function BuilderPageInner() {
   }, [urlProjectId, router]);
 
   const generateCode = async (prompt: string, isResume = false) => {
+    if (!user) {
+      setError("Authentication required to generate projects. Initiating sign-in...");
+      signInWithGoogle("/builder");
+      return;
+    }
+
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1439,6 +1445,7 @@ function BuilderPageInner() {
               }}
               disabled={loading}
               initialPrompt={originalPrompt}
+              isAuthenticated={!!user}
             />
           </div>
 

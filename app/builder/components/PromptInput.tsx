@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { signInWithGoogle } from "@/lib/auth-client";
 
 const EXAMPLE_PROMPTS = [
   "A sleek SaaS landing page with a hero section, feature grid, pricing table, and a call-to-action footer. Dark mode with teal accents.",
@@ -17,6 +18,7 @@ interface PromptInputProps {
   onReset?: () => void;
   disabled?: boolean;
   initialPrompt?: string;
+  isAuthenticated?: boolean;
 }
 
 export default function PromptInput({
@@ -27,12 +29,41 @@ export default function PromptInput({
   onReset,
   disabled = false,
   initialPrompt = "",
+  isAuthenticated = false,
 }: PromptInputProps) {
   const [prompt, setPrompt] = useState(initialPrompt);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     setPrompt(initialPrompt || "");
   }, [initialPrompt]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="h-48 flex flex-col items-center justify-center gap-4 border border-secondary-800 bg-[#0a0f16] p-6 text-center shrink-0">
+        <div className="text-[10px] font-mono text-secondary-600 uppercase tracking-widest">
+          Generate_Module
+        </div>
+        <p className="text-secondary-400 text-xs font-light leading-relaxed max-w-[220px]">
+          Sign in to generate full-stack web applications
+        </p>
+        <button
+          disabled={isSigningIn}
+          onClick={async () => {
+            try {
+              setIsSigningIn(true);
+              await signInWithGoogle("/builder");
+            } catch {
+              setIsSigningIn(false);
+            }
+          }}
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 font-mono text-[10px] uppercase tracking-widest font-bold bg-primary-500 text-secondary-900 hover:bg-primary-400 transition-colors rounded-none disabled:opacity-50 border border-primary-500 cursor-pointer"
+        >
+          {isSigningIn ? "Connecting..." : "Sign In to Generate _"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">

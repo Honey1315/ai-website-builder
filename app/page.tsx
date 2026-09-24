@@ -168,7 +168,7 @@ export default defineConfig({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-secondary-800/80">
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
-                  &lt; 1.5<span className="text-primary-400 text-base sm:text-lg">s</span>
+                  &lt; 4<span className="text-primary-400 text-base sm:text-lg">s</span>
                 </div>
                 <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
                   Sandpack Live HMR
@@ -176,7 +176,7 @@ export default defineConfig({
               </div>
               <div className="p-2 sm:p-0">
                 <div className="text-xl sm:text-2xl md:text-3xl font-display font-light text-white tracking-tight">
-                  React 19
+                  React 18
                 </div>
                 <div className="text-[9px] sm:text-[10px] font-mono text-secondary-500 uppercase tracking-widest leading-tight mt-0.5">
                   Tailwind & Lucide

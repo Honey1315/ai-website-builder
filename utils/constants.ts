@@ -28,14 +28,12 @@ export const MODEL_CATALOG: Record<ModelProvider, ModelCatalogEntry> = {
   openrouter: {
     label: "OpenRouter",
     models: [
-      "inclusionai/ling-3.0-flash-vl:free",
       "z-ai/glm-5.2:free",
       "qwen/qwen3.8-27b:free",
       "poolside/laguna-xs-2.1:free",
       "poolside/laguna-s-2.1:free",
-      "thinkingmachines/inkling:free"
     ],
-    defaultModel: "inclusionai/ling-3.0-flash-vl:free",
+    defaultModel: "poolside/laguna-xs-2.1:free",
   },
   nvidia: {
     label: "NVIDIA",

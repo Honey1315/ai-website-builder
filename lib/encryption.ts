@@ -3,7 +3,12 @@ import crypto from "crypto";
 const ALGORITHM = "aes-256-gcm";
 
 function getKey(): Buffer {
-  const secret = process.env.TOKEN_ENCRYPTION_SECRET || "default-secret-32-characters-long!";
+
+  const secret = process.env.TOKEN_ENCRYPTION_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("TOKEN_ENCRYPTION_SECRET must be set and at least 32 characters");
+  }
+
   return crypto.createHash("sha256").update(secret).digest();
 }
 
