@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { signInWithGoogle } from "@/lib/auth-client";
 
 const EXAMPLE_PROMPTS = [
-  "A sleek SaaS landing page with a hero section, feature grid, pricing table, and a call-to-action footer. Dark mode with teal accents.",
-  "A personal portfolio for a fullstack developer — animated hero, project cards with GitHub/live links, skills section, and contact form.",
-  "A minimal productivity dashboard with sidebar navigation, task list with checkboxes, a calendar widget, and a progress tracker.",
-  "An e-commerce product page with image gallery, size selector, add-to-cart button, reviews section, and a sticky purchase bar.",
+  "SaaS landing page with sticky nav, pricing tiers, and FAQ accordion.",
+  "Developer portfolio with project showcase, tech badges, and contact drawer.",
+  "Kanban task board with drag-and-drop columns, labels, and progress metrics.",
+  "E-commerce product display with gallery carousel, size picker, and cart sidebar."
 ];
 
 interface PromptInputProps {
