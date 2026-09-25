@@ -201,6 +201,28 @@ graph TD
     └── constants.ts                  # Model catalogs, default providers, and prompts
 ```
 
+
+---
+
+## LLM Observability with LangSmith (Optional)
+
+This project supports distributed tracing and token cost monitoring using LangSmith without any LangChain framework dependencies.
+
+To enable LangSmith tracing:
+1. Sign up for a free account at [smith.langchain.com](https://smith.langchain.com).
+2. Create an API key under **Settings > API Keys**.
+3. Add the following to your `.env.local`:
+   ```env
+   LANGSMITH_TRACING=true
+   LANGSMITH_API_KEY=your_lsv2_api_key_here
+   LANGSMITH_PROJECT=ai-website-builder
+   ```
+4. Run diagnostics to verify configuration:
+   ```bash
+   npx tsx scripts/verify-langsmith.ts
+   ```
+5. Restart your Next.js dev server. All website generations, manifest extractions, and model fallbacks will now stream trace telemetry to your LangSmith dashboard in real-time.
+
 ---
 
 ## Deployment Configuration

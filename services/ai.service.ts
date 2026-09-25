@@ -1,4 +1,5 @@
 import { callWithRetry, callWithProviderFallback, callFastUtilityModel } from "@/lib/modelFallback";
+import { safeTraceable } from "@/lib/langsmith";
 import {
   formatPrompt,
   GENERATE_STRUCTURE_PROMPT_TEMPLATE,
@@ -89,41 +90,47 @@ function formatConversationHistory(messages?: ChatMessage[]): string {
 }
 
 export class AIService {
-  static async generateStructure(prompt: string, options: ProviderOptions = {}): Promise<string[]> {
-    const result = await callWithRetry(async () => {
-      const formattedPrompt = formatPrompt(GENERATE_STRUCTURE_PROMPT_TEMPLATE, { prompt });
-      return await callWithProviderFallback([
-        {
-          role: "system",
-          content: "CRITICAL: You are an automated headless project structure generator. Output ONLY clean file paths, one per line, starting on Line 1 with 'src/App.jsx'. If the requested application warrants modular components, follow with component files under 'src/components/'. Do NOT over-engineer. ABSOLUTELY NO REASONING, NO <think> TAGS, NO SCRATCHPAD, NO EXPLANATIONS. Start immediately on Line 1.",
-        },
-        { role: "user", content: formattedPrompt },
-      ], { ...options, temperature: 0.1 });
-    });
-    const structure = extractFileStructure(result);
-    return structure.length > 0 ? structure : DEFAULT_PROJECT_FILES;
-  }
-
-  static async generateManifest(
-    prompt: string,
-    structure: string[],
-    options: ProviderOptions = {}
-  ): Promise<ProjectManifest> {
-    const result = await callWithRetry(async () => {
-      const formattedPrompt = formatPrompt(GENERATE_MANIFEST_PROMPT_TEMPLATE, {
-        prompt,
-        structure: formatStructureBlock(structure),
+  static generateStructure = safeTraceable(
+    async function generateStructure(prompt: string, options: ProviderOptions = {}): Promise<string[]> {
+      const result = await callWithRetry(async () => {
+        const formattedPrompt = formatPrompt(GENERATE_STRUCTURE_PROMPT_TEMPLATE, { prompt });
+        return await callWithProviderFallback([
+          {
+            role: "system",
+            content: "CRITICAL: You are an automated headless project structure generator. Output ONLY clean file paths, one per line, starting on Line 1 with 'src/App.jsx'. If the requested application warrants modular components, follow with component files under 'src/components/'. Do NOT over-engineer. ABSOLUTELY NO REASONING, NO <think> TAGS, NO SCRATCHPAD, NO EXPLANATIONS. Start immediately on Line 1.",
+          },
+          { role: "user", content: formattedPrompt },
+        ], { ...options, temperature: 0.1 });
       });
-      return await callWithProviderFallback([
-        {
-          role: "system",
-          content: "CRITICAL: You are an automated headless project manifest generator. Output ONLY valid raw JSON starting on Line 1 with '{'. ABSOLUTELY NO REASONING, NO <think> TAGS, NO SCRATCHPAD, NO MARKDOWN CODE FENCES. Start immediately on Line 1.",
-        },
-        { role: "user", content: formattedPrompt },
-      ], { ...options, temperature: 0.1 });
-    });
-    return extractManifest(result) || createFallbackManifest(prompt, structure);
-  }
+      const structure = extractFileStructure(result);
+      return structure.length > 0 ? structure : DEFAULT_PROJECT_FILES;
+    },
+    { name: "generateStructure", run_type: "chain" }
+  );
+
+  static generateManifest = safeTraceable(
+    async function generateManifest(
+      prompt: string,
+      structure: string[],
+      options: ProviderOptions = {}
+    ): Promise<ProjectManifest> {
+      const result = await callWithRetry(async () => {
+        const formattedPrompt = formatPrompt(GENERATE_MANIFEST_PROMPT_TEMPLATE, {
+          prompt,
+          structure: formatStructureBlock(structure),
+        });
+        return await callWithProviderFallback([
+          {
+            role: "system",
+            content: "CRITICAL: You are an automated headless project manifest generator. Output ONLY valid raw JSON starting on Line 1 with '{'. ABSOLUTELY NO REASONING, NO <think> TAGS, NO SCRATCHPAD, NO MARKDOWN CODE FENCES. Start immediately on Line 1.",
+          },
+          { role: "user", content: formattedPrompt },
+        ], { ...options, temperature: 0.1 });
+      });
+      return extractManifest(result) || createFallbackManifest(prompt, structure);
+    },
+    { name: "generateManifest", run_type: "chain" }
+  );
 
   static generateFileSummary(
     fileName: string,
@@ -133,66 +140,69 @@ export class AIService {
     return localFileSummary(fileName, content);
   }
 
-  static async generateProjectFile(
-    prompt: string,
-    structure: string[],
-    manifest: ProjectManifest,
-    fileName: string,
-    summaries: Map<string, FileSummary>,
-    mismatches: ValidationMismatch[] = [],
-    options: ProviderOptions = {},
-    existingFiles: FileData[] = []
-  ): Promise<FileData> {
-    const contract = getComponentContract(manifest, fileName);
-    const dependencies = getDirectDependencies(manifest, fileName);
-    const useContractTemplate = isContractFile(fileName);
+  static generateProjectFile = safeTraceable(
+    async function generateProjectFile(
+      prompt: string,
+      structure: string[],
+      manifest: ProjectManifest,
+      fileName: string,
+      summaries: Map<string, FileSummary>,
+      mismatches: ValidationMismatch[] = [],
+      options: ProviderOptions = {},
+      existingFiles: FileData[] = []
+    ): Promise<FileData> {
+      const contract = getComponentContract(manifest, fileName);
+      const dependencies = getDirectDependencies(manifest, fileName);
+      const useContractTemplate = isContractFile(fileName);
 
-    const template = mismatches.length > 0
-      ? FIX_CONTRACT_FILE_PROMPT_TEMPLATE
-      : useContractTemplate
-        ? GENERATE_CONTRACT_FILE_PROMPT_TEMPLATE
-        : GENERATE_FILE_PROMPT_TEMPLATE;
+      const template = mismatches.length > 0
+        ? FIX_CONTRACT_FILE_PROMPT_TEMPLATE
+        : useContractTemplate
+          ? GENERATE_CONTRACT_FILE_PROMPT_TEMPLATE
+          : GENERATE_FILE_PROMPT_TEMPLATE;
 
-    const sharedDataFiles = existingFiles.filter((f) => isDataOrUtilFile(f.name));
+      const sharedDataFiles = existingFiles.filter((f) => isDataOrUtilFile(f.name));
 
-    const currentFile = existingFiles.find((f) => f.name === fileName);
-    const currentContent = currentFile ? currentFile.content : "";
+      const currentFile = existingFiles.find((f) => f.name === fileName);
+      const currentContent = currentFile ? currentFile.content : "";
 
-    const result = await callWithRetry(async () => {
-      const variables: Record<string, string> = {
-        prompt,
-        structure: formatStructureBlock(structure),
-        manifest: formatManifestBlock(manifest),
-        fileName,
-        summaries: formatSummariesBlock(summaries),
-        sharedData: formatSharedDataBlock(sharedDataFiles),
+      const result = await callWithRetry(async () => {
+        const variables: Record<string, string> = {
+          prompt,
+          structure: formatStructureBlock(structure),
+          manifest: formatManifestBlock(manifest),
+          fileName,
+          summaries: formatSummariesBlock(summaries),
+          sharedData: formatSharedDataBlock(sharedDataFiles),
+        };
+
+        if (useContractTemplate || mismatches.length > 0) {
+          variables.contract = formatContractBlock(contract);
+          variables.dependencies = formatDependenciesBlock(dependencies);
+        }
+        if (mismatches.length > 0) {
+          variables.mismatch = formatMismatchBlock(mismatches);
+          variables.currentCode = currentContent || "// Empty or ungenerated";
+        }
+
+        const formattedPrompt = formatPrompt(template, variables);
+        return await callWithProviderFallback([
+          {
+            role: "system",
+            content: `CRITICAL: You are an automated headless React code generator. Output ONLY the complete source code starting on Line 1 with '// FILE: ${fileName}'. ABSOLUTELY NO REASONING, NO CHAIN-OF-THOUGHT, NO SCRATCHPAD, NO INTERNAL MONOLOGUE (never write 'We need to...', 'Now code', etc.), NO RULE RECITATION, NO MARKDOWN CODE FENCES. Line 1 MUST be '// FILE: ${fileName}'.`,
+          },
+          { role: "user", content: formattedPrompt },
+        ], { ...options, temperature: 0.1 });
+      });
+
+      return {
+        name: fileName,
+        content: extractCode(result),
+        language: getLanguageFromFilename(fileName),
       };
-
-      if (useContractTemplate || mismatches.length > 0) {
-        variables.contract = formatContractBlock(contract);
-        variables.dependencies = formatDependenciesBlock(dependencies);
-      }
-      if (mismatches.length > 0) {
-        variables.mismatch = formatMismatchBlock(mismatches);
-        variables.currentCode = currentContent || "// Empty or ungenerated";
-      }
-
-      const formattedPrompt = formatPrompt(template, variables);
-      return await callWithProviderFallback([
-        {
-          role: "system",
-          content: `CRITICAL: You are an automated headless React code generator. Output ONLY the complete source code starting on Line 1 with '// FILE: ${fileName}'. ABSOLUTELY NO REASONING, NO CHAIN-OF-THOUGHT, NO SCRATCHPAD, NO INTERNAL MONOLOGUE (never write 'We need to...', 'Now code', etc.), NO RULE RECITATION, NO MARKDOWN CODE FENCES. Line 1 MUST be '// FILE: ${fileName}'.`,
-        },
-        { role: "user", content: formattedPrompt },
-      ], { ...options, temperature: 0.1 });
-    });
-
-    return {
-      name: fileName,
-      content: extractCode(result),
-      language: getLanguageFromFilename(fileName),
-    };
-  }
+    },
+    { name: "generateProjectFile", run_type: "chain" }
+  );
 
   static validateGeneratedFiles(
     manifest: ProjectManifest,
@@ -203,45 +213,48 @@ export class AIService {
     return { metadata: Array.from(metadataByFile.values()), mismatches };
   }
 
-  static async autoFixFiles(
-    prompt: string,
-    structure: string[],
-    manifest: ProjectManifest,
-    files: FileData[],
-    mismatches: ValidationMismatch[],
-    summaries: Map<string, FileSummary>,
-    options: ProviderOptions = {}
-  ): Promise<FileData[]> {
-    const affectedFiles = getAffectedFiles(mismatches);
-    if (affectedFiles.length === 0) return files;
+  static autoFixFiles = safeTraceable(
+    async function autoFixFiles(
+      prompt: string,
+      structure: string[],
+      manifest: ProjectManifest,
+      files: FileData[],
+      mismatches: ValidationMismatch[],
+      summaries: Map<string, FileSummary>,
+      options: ProviderOptions = {}
+    ): Promise<FileData[]> {
+      const affectedFiles = getAffectedFiles(mismatches);
+      if (affectedFiles.length === 0) return files;
 
-    const fileMap = new Map(files.map((file) => [file.name, file]));
-    let currentMismatches = mismatches;
+      const fileMap = new Map(files.map((file) => [file.name, file]));
+      let currentMismatches = mismatches;
 
-    for (let round = 0; round < MAX_FIX_ROUNDS; round++) {
-      const targets = getAffectedFiles(currentMismatches);
-      if (targets.length === 0) break;
+      for (let round = 0; round < MAX_FIX_ROUNDS; round++) {
+        const targets = getAffectedFiles(currentMismatches);
+        if (targets.length === 0) break;
 
-      for (const fileName of targets) {
-        if (!isCodegenFile(fileName) || STATIC_SYSTEM_FILES.has(fileName)) continue;
-        const fileMismatches = currentMismatches.filter(
-          (mismatch) => mismatch.parentFile === fileName || mismatch.childFile === fileName
-        );
-        const regenerated = await AIService.generateProjectFile(
-          prompt, structure, manifest, fileName, summaries, fileMismatches, options, Array.from(fileMap.values())
-        );
-        fileMap.set(fileName, regenerated);
-        summaries.set(fileName, AIService.generateFileSummary(fileName, regenerated.content));
-        await sleep(GENERATION_PACE_MS);
+        for (const fileName of targets) {
+          if (!isCodegenFile(fileName) || STATIC_SYSTEM_FILES.has(fileName)) continue;
+          const fileMismatches = currentMismatches.filter(
+            (mismatch) => mismatch.parentFile === fileName || mismatch.childFile === fileName
+          );
+          const regenerated = await AIService.generateProjectFile(
+            prompt, structure, manifest, fileName, summaries, fileMismatches, options, Array.from(fileMap.values())
+          );
+          fileMap.set(fileName, regenerated);
+          summaries.set(fileName, AIService.generateFileSummary(fileName, regenerated.content));
+          await sleep(GENERATION_PACE_MS);
+        }
+
+        const updatedFiles = Array.from(fileMap.values());
+        const validation = AIService.validateGeneratedFiles(manifest, updatedFiles);
+        currentMismatches = validation.mismatches;
+        if (currentMismatches.length === 0) return updatedFiles;
       }
-
-      const updatedFiles = Array.from(fileMap.values());
-      const validation = AIService.validateGeneratedFiles(manifest, updatedFiles);
-      currentMismatches = validation.mismatches;
-      if (currentMismatches.length === 0) return updatedFiles;
-    }
-    return Array.from(fileMap.values());
-  }
+      return Array.from(fileMap.values());
+    },
+    { name: "autoFixFiles", run_type: "chain" }
+  );
 
   static async generateCode(prompt: string, options: ProviderOptions = {}): Promise<ContractGenerationResult> {
     try {

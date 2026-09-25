@@ -3,6 +3,7 @@ import type { ChatMessage } from "@/lib/openrouter";
 import { isModelHealthy, tripModel } from "@/lib/circuitBreaker";
 import { MODEL_CATALOG } from "@/utils/constants";
 import { withTimeout } from "@/lib/timeout";
+import { safeTraceable } from "@/lib/langsmith";
 
 function getGeminiModels(): string[] {
   return MODEL_CATALOG.gemini.models;
@@ -55,7 +56,7 @@ function convertToGeminiHistory(
   return history;
 }
 
-export async function callGemini(
+async function executeGeminiCall(
   messages: ChatMessage[],
   options: { temperature?: number; maxTokens?: number; model?: string } = {}
 ): Promise<string> {
@@ -142,8 +143,14 @@ export async function callGemini(
   throw lastError || new Error("All Gemini models failed or are in cooldown");
 }
 
+export const callGemini = safeTraceable(executeGeminiCall, {
+  name: "Google Gemini Inference",
+  run_type: "llm",
+});
+
 export function isGeminiAvailable(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
 export const GEMINI_MODELS = MODEL_CATALOG.gemini.models;
+

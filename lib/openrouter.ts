@@ -3,6 +3,7 @@ import type { ModelProvider, ProviderOptions } from "@/types/ai";
 import { MODEL_CATALOG } from "@/utils/constants";
 import { isModelHealthy, tripModel, getUnhealthyModels } from "@/lib/circuitBreaker";
 import { withTimeout } from "@/lib/timeout";
+import { wrapOpenAIClient } from "@/lib/langsmith";
 
 export type { ModelProvider, ProviderOptions } from "@/types/ai";
 
@@ -36,12 +37,13 @@ export const getNVIDIAConfig = (): NVIDIAConfig => {
 let nvidiaClient: OpenAI | null = null;
 function getNvidiaClient(): OpenAI {
   if (!nvidiaClient) {
-    nvidiaClient = new OpenAI({
+    const rawClient = new OpenAI({
       apiKey: getNvidiaApiKey() || "",
       baseURL: "https://integrate.api.nvidia.com/v1",
       timeout: 35000,
       maxRetries: 0,
     });
+    nvidiaClient = wrapOpenAIClient(rawClient);
   }
   return nvidiaClient;
 }
@@ -49,12 +51,13 @@ function getNvidiaClient(): OpenAI {
 let openRouterClient: OpenAI | null = null;
 function getOpenRouterClient(): OpenAI {
   if (!openRouterClient) {
-    openRouterClient = new OpenAI({
+    const rawClient = new OpenAI({
       apiKey: getOpenRouterApiKey() || "",
       baseURL: "https://openrouter.ai/api/v1",
       timeout: 35000,
       maxRetries: 0,
     });
+    openRouterClient = wrapOpenAIClient(rawClient);
   }
   return openRouterClient;
 }
