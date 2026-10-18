@@ -77,7 +77,7 @@ export function Navbar() {
                 <span className="text-primary-400 font-mono text-[10px]">AI</span>
               </div>
               <span className="text-sm font-display tracking-[0.2em] uppercase text-white">
-                Website Builder
+                SnapBuild
               </span>
             </Link>
             <div className="flex gap-4 items-center">
@@ -98,7 +98,7 @@ export function Navbar() {
               <span className="text-primary-400 font-mono text-[10px]">AI</span>
             </div>
             <span className="text-xs sm:text-sm font-display tracking-[0.15em] sm:tracking-[0.2em] uppercase text-white font-medium">
-              <span className="hidden xs:inline sm:inline">AI </span>Website Builder
+              <span className="hidden xs:inline sm:inline"></span>SnapBuild
             </span>
           </Link>
 

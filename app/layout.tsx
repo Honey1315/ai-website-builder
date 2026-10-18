@@ -14,7 +14,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "AI Website Builder",
+  title: "SnapBuild | AI Website Builder",
   description:
     "Generate production-ready React websites from a natural language prompt, refine them in chat, preview live, and deploy.",
 };

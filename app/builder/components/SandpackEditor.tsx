@@ -61,9 +61,9 @@ body {
     <meta name="theme-color" content="#000000" />
     <meta
       name="description"
-      content="AI Website Builder"
+      content="SnapBuild | AI Website Builder"
     />
-    <title>AI Website Builder</title>
+    <title>SnapBuild</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body>

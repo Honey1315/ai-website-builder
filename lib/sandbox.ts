@@ -8,7 +8,7 @@ export function createSandpackFiles(code: string, files?: FileData[]) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Website Builder</title>
+    <title>SnapBuild</title>
   </head>
   <body>
     <div id="root"></div>

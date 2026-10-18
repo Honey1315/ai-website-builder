@@ -673,7 +673,7 @@ export default defineConfig({
               <thead>
                 <tr className="border-b border-secondary-800 text-[10px] sm:text-xs font-mono uppercase tracking-widest text-secondary-500">
                   <th className="py-3 px-4">Feature</th>
-                  <th className="py-3 px-4 text-primary-400">AI Website Builder</th>
+                  <th className="py-3 px-4 text-primary-400">SnapBuild</th>
                   <th className="py-3 px-4 text-secondary-500">Legacy AI Builders</th>
                 </tr>
               </thead>
@@ -829,11 +829,11 @@ export default defineConfig({
               <span className="text-primary-400 font-mono text-[10px]">AI</span>
             </div>
             <span className="text-white font-display uppercase tracking-widest text-xs font-medium">
-              AI Website Builder
+              SnapBuild
             </span>
           </div>
           <div className="text-secondary-500 text-[9px] sm:text-[11px] font-mono uppercase tracking-widest">
-            © {new Date().getFullYear()} AI WEBSITE BUILDER. VITE • REACT • TAILWIND • GEMINI • VERCEL.
+            © {new Date().getFullYear()} SNAPBUILD
           </div>
         </div>
       </footer>
