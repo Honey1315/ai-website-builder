@@ -1,4 +1,4 @@
-# AI Website Builder
+# SnapBuild | AI Website Builder
 
 A modern, full-stack AI website builder powered by Next.js 16, React 19, and Tailwind CSS v4. Generate, preview, iteratively refine, and deploy complete multi-file React web applications directly in your browser using natural language prompts.
 
